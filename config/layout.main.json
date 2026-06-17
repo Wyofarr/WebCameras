@@ -1,0 +1,39 @@
+{
+  "label": "Main View",
+  "cameras": [
+    {
+      "id": "front-door",
+      "label": "Front Door",
+      "url": "rtsp://192.168.1.100:554/stream1",
+      "transport": "tcp",
+      "type": "rtsp"
+    },
+    {
+      "id": "backyard",
+      "label": "Backyard",
+      "url": "rtsp://192.168.1.101:554/stream1",
+      "transport": "tcp",
+      "type": "rtsp"
+    },
+    {
+      "id": "garage",
+      "label": "Garage",
+      "url": "rtsp://192.168.1.102:554/stream1",
+      "transport": "tcp",
+      "type": "rtsp"
+    },
+    {
+      "id": "driveway",
+      "label": "Driveway",
+      "url": "rtsp://192.168.1.103:554/stream1",
+      "transport": "tcp",
+      "type": "rtsp"
+    }
+  ],
+  "windows": [
+    { "id": "w1", "x": 0,    "y": 0,   "w": 0.5,  "h": 0.5,  "cameraId": "front-door", "label": "Front Door" },
+    { "id": "w2", "x": 0.5,  "y": 0,   "w": 0.5,  "h": 0.5,  "cameraId": "backyard",   "label": "Backyard" },
+    { "id": "w3", "x": 0,    "y": 0.5, "w": 0.5,  "h": 0.5,  "cameraId": "garage",     "label": "Garage" },
+    { "id": "w4", "x": 0.5,  "y": 0.5, "w": 0.5,  "h": 0.5,  "cameraId": "driveway",   "label": "Driveway" }
+  ]
+}

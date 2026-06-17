@@ -1,0 +1,18 @@
+{
+  "name": "webcameras",
+  "version": "1.0.0",
+  "description": "Web-based IP camera display system — LXC container edition of displaycameras",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "nodemon server/index.js"
+  },
+  "dependencies": {
+    "chokidar": "^3.5.3",
+    "express": "^4.18.2",
+    "socket.io": "^4.7.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "label": "Featured",
+  "cameras": [],
+  "windows": [
+    { "id": "w1", "x": 0,     "y": 0,     "w": 0.667, "h": 1,     "cameraId": "front-door", "label": "Front Door" },
+    { "id": "w2", "x": 0.667, "y": 0,     "w": 0.333, "h": 0.333, "cameraId": "backyard",   "label": "Backyard" },
+    { "id": "w3", "x": 0.667, "y": 0.333, "w": 0.333, "h": 0.333, "cameraId": "garage",     "label": "Garage" },
+    { "id": "w4", "x": 0.667, "y": 0.667, "w": 0.333, "h": 0.333, "cameraId": "driveway",   "label": "Driveway" }
+  ]
+}

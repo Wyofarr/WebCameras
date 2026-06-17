@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebCameras</title>
+  <link rel="stylesheet" href="/css/main.css">
+  <!-- HLS.js for browser RTSP/HLS playback -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.4.12/hls.min.js"></script>
+</head>
+<body>
+
+<!-- ── Top Nav ──────────────────────────────────────────────────────────── -->
+<header id="topbar">
+  <div id="topbar-left">
+    <span id="app-icon">⬡</span>
+    <span id="app-name">WebCameras</span>
+  </div>
+  <div id="page-tabs-wrap">
+    <div id="page-tabs"></div>
+    <button id="btn-add-page" title="New layout page">+</button>
+  </div>
+  <div id="topbar-right">
+    <button id="btn-fullscreen" title="Fullscreen">⛶</button>
+    <button id="btn-settings" title="Settings">⚙</button>
+    <div id="status-dot" title="Server connected"></div>
+  </div>
+</header>
+
+<!-- ── Main View ────────────────────────────────────────────────────────── -->
+<main id="view-area">
+  <div id="camera-grid"></div>
+  <div id="empty-state">
+    <div id="empty-icon">📷</div>
+    <h2>No cameras configured</h2>
+    <p>Open <strong>Settings</strong> to add cameras and define layouts.</p>
+    <button class="btn-primary" id="btn-empty-settings">Open Settings</button>
+  </div>
+</main>
+
+<!-- ── Settings Panel ───────────────────────────────────────────────────── -->
+<aside id="settings-panel" class="hidden">
+  <div id="settings-header">
+    <h2>Settings</h2>
+    <button id="btn-close-settings">✕</button>
+  </div>
+
+  <nav id="settings-nav">
+    <button class="snav active" data-tab="cameras">Cameras</button>
+    <button class="snav" data-tab="layouts">Layouts</button>
+    <button class="snav" data-tab="global">Global</button>
+  </nav>
+
+  <!-- Cameras Tab -->
+  <div class="stab active" id="tab-cameras">
+    <div class="tab-toolbar">
+      <h3>Camera Sources</h3>
+      <button class="btn-sm btn-primary" id="btn-add-camera">+ Add Camera</button>
+    </div>
+    <div id="camera-list"></div>
+  </div>
+
+  <!-- Layouts Tab -->
+  <div class="stab" id="tab-layouts">
+    <div class="tab-toolbar">
+      <h3>Layout Pages</h3>
+      <button class="btn-sm btn-primary" id="btn-add-layout">+ New Layout</button>
+    </div>
+    <div id="layout-list"></div>
+  </div>
+
+  <!-- Global Tab -->
+  <div class="stab" id="tab-global">
+    <h3>Global Options</h3>
+    <form id="form-global">
+      <label>App Title
+        <input type="text" name="title" placeholder="WebCameras">
+      </label>
+      <label>Rotate Pages
+        <input type="checkbox" name="rotate">
+      </label>
+      <label>Rotate Delay (seconds)
+        <input type="number" name="rotatedelay" min="5" max="3600" value="30">
+      </label>
+      <label>Stream Start Sleep (seconds)
+        <input type="number" name="startsleep" min="0" max="30" value="2">
+      </label>
+      <label>Feed Sleep (seconds)
+        <input type="number" name="feedsleep" min="0" max="30" value="2">
+      </label>
+      <label>Retry Attempts
+        <input type="number" name="retry" min="1" max="20" value="3">
+      </label>
+      <button type="submit" class="btn-primary">Save Global Config</button>
+    </form>
+  </div>
+</aside>
+
+<!-- ── Modal Dialogs ─────────────────────────────────────────────────────── -->
+<div id="modal-overlay" class="hidden">
+  <div id="modal-box">
+    <div id="modal-header">
+      <h3 id="modal-title">Dialog</h3>
+      <button id="modal-close">✕</button>
+    </div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<!-- ── Camera fullscreen overlay ─────────────────────────────────────────── -->
+<div id="cam-fullscreen" class="hidden">
+  <video id="cam-fs-video" autoplay muted playsinline></video>
+  <div id="cam-fs-label"></div>
+  <button id="cam-fs-close">✕</button>
+</div>
+
+<script type="module" src="/js/app.js"></script>
+</body>
+</html>

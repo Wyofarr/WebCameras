@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  webcameras:
+    build: .
+    container_name: webcameras
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config:/etc/webcameras
+      - hls_tmp:/tmp/webcameras/hls
+    environment:
+      - PORT=8080
+      - CONFIG_PATH=/etc/webcameras
+      - NODE_ENV=production
+    # Give ffmpeg access to host network for RTSP discovery
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  hls_tmp:

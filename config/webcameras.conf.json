@@ -1,0 +1,9 @@
+{
+  "title": "WebCameras",
+  "rotate": false,
+  "rotatedelay": 30,
+  "startsleep": 2,
+  "feedsleep": 2,
+  "retry": 3,
+  "displaydetect": false
+}

@@ -251,6 +251,11 @@ app.post('/api/test-stream', async (req, res) => {
   setTimeout(() => { proc.kill(); res.json({ ok: false, error: 'Timeout' }); }, 8000);
 });
 
+// Config UI
+app.get('/config', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/config.html'));
+});
+
 // Serve frontend for all other routes
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/index.html'));

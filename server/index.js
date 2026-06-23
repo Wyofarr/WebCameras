@@ -87,8 +87,27 @@ function getStreamDir(cameraId) {
   return path.join(HLS_DIR, cameraId);
 }
 
+function buildAuthUrl(url, username, password) {
+  if (!url || !username) return url;
+  try {
+    const u = new URL(url);
+    u.username = encodeURIComponent(username);
+    u.password = encodeURIComponent(password || '');
+    return u.toString();
+  } catch {
+    const proto = url.match(/^([a-z]+:\/\/)/i);
+    if (proto) {
+      const rest = url.slice(proto[1].length);
+      const pass = password ? `:${encodeURIComponent(password)}` : '';
+      return `${proto[1]}${encodeURIComponent(username)}${pass}@${rest}`;
+    }
+    return url;
+  }
+}
+
 function startStream(camera) {
-  const { id, url, transport = 'tcp' } = camera;
+  const { id, transport = 'tcp' } = camera;
+  const url = buildAuthUrl(camera.url, camera.username, camera.password);
   if (activeStreams.has(id)) {
     activeStreams.get(id).clients++;
     return;
@@ -207,9 +226,9 @@ app.delete('/api/layouts/:name', (req, res) => {
 
 // Start streaming a camera
 app.post('/api/streams/:cameraId/start', (req, res) => {
-  const { url, transport } = req.body;
+  const { url, transport, username, password } = req.body;
   if (!url) return res.status(400).json({ error: 'url required' });
-  startStream({ id: req.params.cameraId, url, transport });
+  startStream({ id: req.params.cameraId, url, transport, username, password });
   res.json({ ok: true, hlsUrl: `/hls/${req.params.cameraId}/stream.m3u8` });
 });
 
@@ -230,7 +249,8 @@ app.get('/api/streams', (req, res) => {
 
 // Test camera connectivity
 app.post('/api/test-stream', async (req, res) => {
-  const { url, transport = 'tcp' } = req.body;
+  const { transport = 'tcp' } = req.body;
+  const url = buildAuthUrl(req.body.url, req.body.username, req.body.password);
   const proc = spawn('ffprobe', [
     '-rtsp_transport', transport,
     '-i', url,

@@ -286,14 +286,41 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
       </div>
       <div class="field">
         <label>Stream URL <span style="color:var(--red)">*</span></label>
-        <input type="text" id="cam-url" placeholder="rtsp://192.168.1.100:554/stream1">
-        <span class="hint">rtsp://, http://, or mjpeg://</span>
+        <input type="text" id="cam-url" placeholder="rtsp://192.168.1.100:554/stream1"
+          oninput="updateUrlPreview()">
+        <span class="hint">Base URL only — do not include username or password here</span>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Username</label>
+          <input type="text" id="cam-username" placeholder="admin" autocomplete="off"
+            oninput="updateUrlPreview()">
+          <span class="hint">Leave blank if no auth needed</span>
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <div style="position:relative">
+            <input type="password" id="cam-password" placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;"
+              autocomplete="new-password" oninput="updateUrlPreview()"
+              style="width:100%;padding-right:38px">
+            <button type="button" onclick="togglePassVis()" title="Show/hide password"
+              id="pass-vis-btn"
+              style="position:absolute;right:8px;top:50%;transform:translateY(-50%);
+              font-size:13px;color:var(--text-muted);background:none;border:none;cursor:pointer">&#128065;</button>
+          </div>
+        </div>
+      </div>
+      <div id="url-preview-wrap" style="display:none;margin-bottom:4px">
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Full URL sent to ffmpeg:</div>
+        <div id="url-preview" style="font-family:var(--mono);font-size:11px;color:var(--accent);
+          background:var(--surface2);border:1px solid var(--border);border-radius:4px;
+          padding:6px 10px;word-break:break-all"></div>
       </div>
       <div class="field-row">
         <div class="field">
           <label>Stream Type</label>
           <select id="cam-type">
-            <option value="rtsp">RTSP → HLS (server transcode)</option>
+            <option value="rtsp">RTSP &#8594; HLS (server transcode)</option>
             <option value="hls">HLS direct (.m3u8)</option>
             <option value="mjpeg">MJPEG (direct)</option>
           </select>
@@ -476,8 +503,13 @@ function openAddCamera() {
   document.getElementById('cam-id').readOnly = false;
   document.getElementById('cam-label').value = '';
   document.getElementById('cam-url').value = '';
+  document.getElementById('cam-username').value = '';
+  document.getElementById('cam-password').value = '';
+  document.getElementById('cam-password').type = 'password';
+  document.getElementById('pass-vis-btn').textContent = '\u{1F441}';
   document.getElementById('cam-type').value = 'rtsp';
   document.getElementById('cam-transport').value = 'tcp';
+  document.getElementById('url-preview-wrap').style.display = 'none';
   populatePageSelect('cam-page', Object.keys(layouts)[0]);
   document.getElementById('cam-test-result').style.display='none';
   document.getElementById('cam-form-card').style.display='block';
@@ -493,8 +525,13 @@ function openEditCamera(id) {
   document.getElementById('cam-id').readOnly = true;
   document.getElementById('cam-label').value = cam.label||'';
   document.getElementById('cam-url').value = cam.url||'';
+  document.getElementById('cam-username').value = cam.username||'';
+  document.getElementById('cam-password').value = cam.password||'';
+  document.getElementById('cam-password').type = 'password';
+  document.getElementById('pass-vis-btn').textContent = '\u{1F441}';
   document.getElementById('cam-type').value = cam.type||'rtsp';
   document.getElementById('cam-transport').value = cam.transport||'tcp';
+  updateUrlPreview();
   // Find which page this camera is on
   let page = Object.keys(layouts)[0];
   for (const [n,l] of Object.entries(layouts))
@@ -511,10 +548,14 @@ function closeCamForm() {
 
 async function saveCamera() {
   const editId = document.getElementById('cam-edit-id').value;
+  const username = document.getElementById('cam-username').value.trim();
+  const password = document.getElementById('cam-password').value;
   const cam = {
     id:        document.getElementById('cam-id').value.trim().replace(/\s+/g,'-'),
     label:     document.getElementById('cam-label').value.trim(),
     url:       document.getElementById('cam-url').value.trim(),
+    username:  username,
+    password:  password,
     type:      document.getElementById('cam-type').value,
     transport: document.getElementById('cam-transport').value,
   };
@@ -569,12 +610,16 @@ async function deleteCamera(id) {
 }
 
 async function testCamera() {
-  const url = document.getElementById('cam-url').value.trim();
+  const url = buildAuthUrl(
+    document.getElementById('cam-url').value.trim(),
+    document.getElementById('cam-username').value.trim(),
+    document.getElementById('cam-password').value
+  );
   const transport = document.getElementById('cam-transport').value;
   const res = document.getElementById('cam-test-result');
   res.style.display='block';
   res.style.color='var(--text-muted)';
-  res.textContent='⏳ Testing…';
+  res.textContent='⏳ Testing connection…';
   try {
     const r = await fetch('/api/test-stream',{method:'POST',
       headers:{'Content-Type':'application/json'},body:JSON.stringify({url,transport})});
@@ -582,6 +627,57 @@ async function testCamera() {
     if (d.ok) { res.style.color='var(--accent)'; res.textContent='✓ Connection successful'; }
     else       { res.style.color='var(--red)';    res.textContent='✗ '+(d.error||'Failed'); }
   } catch { res.style.color='var(--red)'; res.textContent='✗ Server error'; }
+}
+
+// Build URL with credentials embedded: rtsp://user:pass@host/path
+function buildAuthUrl(url, username, password) {
+  if (!url || !username) return url;
+  try {
+    const u = new URL(url);
+    u.username = encodeURIComponent(username);
+    u.password = encodeURIComponent(password || '');
+    return u.toString();
+  } catch {
+    // Fallback: manual inject for non-standard URLs
+    const proto = url.match(/^([a-z]+:\/\/)/i);
+    if (proto) {
+      const rest = url.slice(proto[1].length);
+      const pass = password ? `:${encodeURIComponent(password)}` : '';
+      return `${proto[1]}${encodeURIComponent(username)}${pass}@${rest}`;
+    }
+    return url;
+  }
+}
+
+// Show live preview of the full URL as user types
+function updateUrlPreview() {
+  const url      = document.getElementById('cam-url').value.trim();
+  const username = document.getElementById('cam-username').value.trim();
+  const password = document.getElementById('cam-password').value;
+  const wrap = document.getElementById('url-preview-wrap');
+  const prev = document.getElementById('url-preview');
+  if (url && username) {
+    const full = buildAuthUrl(url, username, password);
+    // Mask password in preview display
+    const masked = full.replace(/:([^@]+)@/, ':<span style="color:var(--text-dim)">••••••</span>@');
+    wrap.style.display = 'block';
+    prev.innerHTML = masked;
+  } else {
+    wrap.style.display = url ? 'block' : 'none';
+    prev.innerHTML = url || '';
+  }
+}
+
+function togglePassVis() {
+  const inp = document.getElementById('cam-password');
+  const btn = document.getElementById('pass-vis-btn');
+  if (inp.type === 'password') {
+    inp.type = 'text';
+    btn.textContent = '🙈';
+  } else {
+    inp.type = 'password';
+    btn.textContent = '\u{1F441}';
+  }
 }
 
 // ─── Layout List ──────────────────────────────────────────────────────────

@@ -69,7 +69,6 @@ cat > /etc/systemd/system/webcameras.service << SVCEOF
 [Unit]
 Description=WebCameras — Web IP Camera Display
 After=network.target
-Wants=network-online.target
 
 [Service]
 Type=simple
@@ -84,10 +83,6 @@ Restart=always
 RestartSec=5
 StandardOutput=append:/var/log/webcameras/app.log
 StandardError=append:/var/log/webcameras/error.log
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ReadWritePaths=/tmp/webcameras /etc/webcameras /var/log/webcameras
 
 [Install]
 WantedBy=multi-user.target

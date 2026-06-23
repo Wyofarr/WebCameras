@@ -44,7 +44,12 @@ export const StreamManager = {
         const resp = await fetch(`/api/streams/${encodeURIComponent(id)}/start`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url, transport: camera.transport || 'tcp' })
+          body: JSON.stringify({
+            url,
+            transport: camera.transport || 'tcp',
+            username: camera.username || '',
+            password: camera.password || ''
+          })
         });
         const data = await resp.json();
         if (data.hlsUrl) {

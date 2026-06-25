@@ -333,6 +333,29 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
           </select>
         </div>
       </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Transcode Output Resolution</label>
+          <select id="cam-resolution">
+            <option value="1080">1080p — Full HD (recommended)</option>
+            <option value="720">720p — HD (lower CPU)</option>
+            <option value="480">480p — SD (minimal CPU)</option>
+            <option value="2160">2160p — 4K (very high CPU)</option>
+            <option value="source">Source resolution (H.264 only)</option>
+          </select>
+          <span class="hint">H.265/HEVC cameras must transcode — browsers can't play H.265</span>
+        </div>
+        <div class="field">
+          <label>Video Bitrate</label>
+          <select id="cam-bitrate">
+            <option value="2500">2500k — Good quality</option>
+            <option value="1500">1500k — Balanced</option>
+            <option value="800">800k — Low bandwidth</option>
+            <option value="4000">4000k — High quality</option>
+            <option value="6000">6000k — Maximum</option>
+          </select>
+        </div>
+      </div>
       <div class="field">
         <label>Assign to Layout Page</label>
         <select id="cam-page"></select>
@@ -509,6 +532,8 @@ function openAddCamera() {
   document.getElementById('pass-vis-btn').textContent = '\u{1F441}';
   document.getElementById('cam-type').value = 'rtsp';
   document.getElementById('cam-transport').value = 'tcp';
+  document.getElementById('cam-resolution').value = '1080';
+  document.getElementById('cam-bitrate').value = '2500';
   document.getElementById('url-preview-wrap').style.display = 'none';
   populatePageSelect('cam-page', Object.keys(layouts)[0]);
   document.getElementById('cam-test-result').style.display='none';
@@ -531,6 +556,8 @@ function openEditCamera(id) {
   document.getElementById('pass-vis-btn').textContent = '\u{1F441}';
   document.getElementById('cam-type').value = cam.type||'rtsp';
   document.getElementById('cam-transport').value = cam.transport||'tcp';
+  document.getElementById('cam-resolution').value = cam.resolution||'1080';
+  document.getElementById('cam-bitrate').value = cam.bitrate||'2500';
   updateUrlPreview();
   // Find which page this camera is on
   let page = Object.keys(layouts)[0];
@@ -553,11 +580,13 @@ async function saveCamera() {
   const cam = {
     id:        document.getElementById('cam-id').value.trim().replace(/\s+/g,'-'),
     label:     document.getElementById('cam-label').value.trim(),
-    url:       document.getElementById('cam-url').value.trim(),
-    username:  username,
-    password:  password,
-    type:      document.getElementById('cam-type').value,
-    transport: document.getElementById('cam-transport').value,
+    url:        document.getElementById('cam-url').value.trim(),
+    username:   username,
+    password:   password,
+    type:       document.getElementById('cam-type').value,
+    transport:  document.getElementById('cam-transport').value,
+    resolution: document.getElementById('cam-resolution').value,
+    bitrate:    document.getElementById('cam-bitrate').value,
   };
   if (!cam.id || !cam.url) { toast('ID and URL are required','err'); return; }
 

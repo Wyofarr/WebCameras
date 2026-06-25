@@ -105,6 +105,44 @@ function buildAuthUrl(url, username, password) {
   }
 }
 
+function buildFfmpegArgs(camera, url, dir) {
+  const transport  = camera.transport || 'tcp';
+  const resolution = camera.resolution || '1080';
+  const bitrate    = camera.bitrate    || '2500';
+  const playlist   = path.join(dir, 'stream.m3u8');
+
+  // Source resolution = copy video (camera must be H.264)
+  const videoArgs = resolution === 'source'
+    ? ['-c:v', 'copy']
+    : [
+        '-c:v', 'libx264',
+        '-preset', 'ultrafast',
+        '-tune', 'zerolatency',
+        '-vf', `scale=-2:${resolution}`,
+        '-b:v', `${bitrate}k`,
+        '-maxrate', `${bitrate}k`,
+        '-bufsize', `${parseInt(bitrate) * 2}k`,
+        '-g', '30',
+        '-sc_threshold', '0',
+      ];
+
+  return [
+    '-hide_banner', '-loglevel', 'warning',
+    '-rtsp_transport', transport,
+    '-i', url,
+    ...videoArgs,
+    '-c:a', 'aac',
+    '-b:a', '128k',
+    '-f', 'hls',
+    '-hls_time', '2',
+    '-hls_list_size', '5',
+    '-hls_flags', 'delete_segments+append_list+omit_endlist',
+    '-hls_segment_type', 'mpegts',
+    '-hls_segment_filename', path.join(dir, 'seg%03d.ts'),
+    playlist
+  ];
+}
+
 function startStream(camera) {
   const { id, transport = 'tcp' } = camera;
   const url = buildAuthUrl(camera.url, camera.username, camera.password);
@@ -116,22 +154,7 @@ function startStream(camera) {
   const dir = getStreamDir(id);
   fs.mkdirSync(dir, { recursive: true });
 
-  const playlist = path.join(dir, 'stream.m3u8');
-
-  const args = [
-    '-hide_banner', '-loglevel', 'warning',
-    '-rtsp_transport', transport,
-    '-i', url,
-    '-c:v', 'copy',
-    '-c:a', 'aac',
-    '-f', 'hls',
-    '-hls_time', '2',
-    '-hls_list_size', '5',
-    '-hls_flags', 'delete_segments+append_list',
-    '-hls_segment_type', 'mpegts',
-    '-hls_segment_filename', path.join(dir, 'seg%03d.ts'),
-    playlist
-  ];
+  const args = buildFfmpegArgs(camera, url, dir);
 
   console.log(`[stream] Starting: ${id} → ${url}`);
   const proc = spawn('ffmpeg', args, { detached: false });
@@ -226,9 +249,9 @@ app.delete('/api/layouts/:name', (req, res) => {
 
 // Start streaming a camera
 app.post('/api/streams/:cameraId/start', (req, res) => {
-  const { url, transport, username, password } = req.body;
+  const { url, transport, username, password, resolution, bitrate } = req.body;
   if (!url) return res.status(400).json({ error: 'url required' });
-  startStream({ id: req.params.cameraId, url, transport, username, password });
+  startStream({ id: req.params.cameraId, url, transport, username, password, resolution, bitrate });
   res.json({ ok: true, hlsUrl: `/hls/${req.params.cameraId}/stream.m3u8` });
 });
 

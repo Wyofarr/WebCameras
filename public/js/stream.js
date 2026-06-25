@@ -46,9 +46,11 @@ export const StreamManager = {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             url,
-            transport: camera.transport || 'tcp',
-            username: camera.username || '',
-            password: camera.password || ''
+            transport:  camera.transport  || 'tcp',
+            username:   camera.username   || '',
+            password:   camera.password   || '',
+            resolution: camera.resolution || '1080',
+            bitrate:    camera.bitrate    || '2500'
           })
         });
         const data = await resp.json();

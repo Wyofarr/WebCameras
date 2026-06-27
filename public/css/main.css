@@ -573,11 +573,116 @@ label textarea { resize: vertical; min-height: 60px; font-family: var(--font-mon
   to   { transform: translateY(0); opacity: 1; }
 }
 
-/* ─── Responsive ────────────────────────────────────────────────── */
+/* ─── Responsive / Mobile ───────────────────────────────────────── */
+
+/* Tablet */
+@media (max-width: 900px) {
+  :root { --panel-w: 320px; }
+}
+
+/* Mobile */
 @media (max-width: 600px) {
-  :root { --panel-w: 100vw; }
-  #topbar-left { min-width: auto; padding: 0 10px; }
+  :root {
+    --topbar-h: 52px;
+    --panel-w: 100vw;
+  }
+
+  #topbar-left { min-width: auto; padding: 0 10px; border-right: none; }
   #app-name { display: none; }
+  #app-icon { font-size: 22px; }
+  #btn-add-page { display: none; }
+
+  #page-tabs-wrap { padding: 0 4px; }
+  .page-tab { padding: 0 10px; font-size: 11px; min-height: 44px; }
+  .page-tab .tab-del { opacity: 1; }
+
+  #topbar-right { padding: 0 8px; gap: 4px; }
+  #topbar-right button { width: 36px; height: 36px; font-size: 16px; }
+  #status-dot { width: 7px; height: 7px; }
+
+  /* Leave room for bottom nav */
+  #view-area { bottom: 56px; }
+  #view-area.panel-open { right: 0; bottom: 56px; }
+
+  .cam-label { padding: 6px 8px; font-size: 10px; }
+  .cam-label .cam-time { display: none; }
+  .cam-rec-dot { width: 7px; height: 7px; top: 6px; right: 6px; }
+
+  /* Settings panel slides up from bottom */
+  #settings-panel {
+    top: auto;
+    bottom: 56px;
+    left: 0; right: 0;
+    width: 100%;
+    height: 75vh;
+    border-left: none;
+    border-top: 1px solid var(--border);
+    border-radius: 12px 12px 0 0;
+  }
+  #settings-panel.hidden { transform: translateY(100%); }
+
+  #settings-header { padding: 12px 16px; }
+  .stab { padding: 12px 14px; }
+
+  .list-card { padding: 10px; }
+  .list-card-title { font-size: 11px; }
+  .card-actions button { padding: 4px 10px; }
+
+  /* Prevent iOS zoom on input focus */
+  label input[type="text"],
+  label input[type="number"],
+  label input[type="url"],
+  label select { font-size: 16px; }
+
+  #cam-fs-label { font-size: 12px; bottom: 70px; }
+  #cam-fs-close { width: 40px; height: 40px; top: 12px; right: 12px; }
+
+  #empty-icon { font-size: 40px; }
+  #empty-state h2 { font-size: 16px; }
+
+  #toast-container { bottom: 66px; right: 10px; left: 10px; }
+  .toast { max-width: 100%; }
+}
+
+/* ─── Mobile Bottom Nav Bar ─────────────────────────────────────── */
+#mobile-nav { display: none; }
+
+@media (max-width: 600px) {
+  #mobile-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    height: 56px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    z-index: 300;
+    align-items: stretch;
+  }
+  .mobile-nav-btn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    font-size: 10px;
+    color: var(--text-muted);
+    background: none;
+    border: none;
+    cursor: pointer;
+    transition: color 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .mobile-nav-btn .mnav-icon { font-size: 20px; line-height: 1; }
+  .mobile-nav-btn.active { color: var(--accent); }
+  .mobile-nav-btn:active { background: var(--surface2); }
+}
+
+/* ─── Touch improvements ────────────────────────────────────────── */
+@media (hover: none) {
+  .cam-cell:hover { border-color: transparent; }
+  .btn-primary, .btn-danger { min-height: 44px; }
+  .snav { min-height: 44px; }
 }
 
 /* ─── Utility ───────────────────────────────────────────────────── */

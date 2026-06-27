@@ -201,3 +201,37 @@ function bindTopbarEvents() {
     }
   });
 }
+
+
+// ─── Mobile Navigation ───────────────────────────────────────────────────────
+export function mobileNav(mode, btn) {
+  document.querySelectorAll('.mobile-nav-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+
+  if (mode === 'settings') {
+    SettingsPanel.open();
+    document.getElementById('mnav-view')?.classList.remove('active');
+  } else {
+    SettingsPanel.close();
+    document.getElementById('mnav-view')?.classList.add('active');
+  }
+}
+
+export function mobilePrevPage() {
+  const pages = Object.keys(state.layouts);
+  if (pages.length < 2) return;
+  const idx = pages.indexOf(state.currentPage);
+  switchPage(pages[(idx - 1 + pages.length) % pages.length]);
+}
+
+export function mobileNextPage() {
+  const pages = Object.keys(state.layouts);
+  if (pages.length < 2) return;
+  const idx = pages.indexOf(state.currentPage);
+  switchPage(pages[(idx + 1) % pages.length]);
+}
+
+// Expose to global scope for inline onclick handlers in mobile nav
+window.mobileNav     = mobileNav;
+window.mobilePrevPage = mobilePrevPage;
+window.mobileNextPage = mobileNextPage;

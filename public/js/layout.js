@@ -41,7 +41,12 @@ export const LayoutManager = {
       // Find camera config and start stream
       const cam = this._findCamera(win.cameraId || win.id, layout);
       if (cam) {
-        StreamManager.attach(cam, cell.video, cell.overlay);
+        // Pass window dimensions so server can pad to exact aspect ratio
+        StreamManager.attach(
+          { ...cam, windowW: win.w, windowH: win.h },
+          cell.video,
+          cell.overlay
+        );
       }
     }
   },

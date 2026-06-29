@@ -50,7 +50,9 @@ export const StreamManager = {
             username:   camera.username   || '',
             password:   camera.password   || '',
             resolution: camera.resolution || '1080',
-            bitrate:    camera.bitrate    || '2500'
+            bitrate:    camera.bitrate    || '2500',
+            windowW:    camera.windowW    || null,
+            windowH:    camera.windowH    || null
           })
         });
         const data = await resp.json();
@@ -91,11 +93,18 @@ export const StreamManager = {
   _attachHls(id, hlsUrl, videoEl, overlayEl, retryCount = 0) {
     if (Hls.isSupported()) {
       const hls = new Hls({
-        lowLatencyMode:    true,
-        liveSyncDuration:  2,
-        liveMaxLatencyDuration: 6,
-        maxBufferLength:   10,
-        startLevel:        -1,
+        lowLatencyMode:          true,
+        liveSyncDuration:        1,
+        liveMaxLatencyDuration:  4,
+        maxBufferLength:         6,
+        maxMaxBufferLength:      10,
+        startLevel:              -1,
+        manifestLoadingTimeOut:  5000,
+        manifestLoadingMaxRetry: 6,
+        manifestLoadingRetryDelay: 500,
+        levelLoadingTimeOut:     5000,
+        fragLoadingTimeOut:      10000,
+        fragLoadingMaxRetry:     6,
       });
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {

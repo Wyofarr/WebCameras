@@ -1,20 +1,18 @@
 /**
  * WebCameras — Browser Application
- * Manages layouts, pages, camera streams (HLS via hls.js), and UI state
  */
 
-import { LayoutManager }   from './layout.js';
-import { StreamManager }   from './stream.js';
-import { SettingsPanel }   from './settings.js';
-import { Toast }           from './toast.js';
+import { LayoutManager } from './layout.js';
+import { StreamManager }  from './stream.js';
+import { SettingsPanel }  from './settings.js';
+import { Toast }          from './toast.js';
 
-// ─── Global State ────────────────────────────────────────────────────────────
 export const state = {
-  config:       {},
-  layouts:      {},     // { name: layoutDef }
-  currentPage:  null,   // layout name
-  rotateTimer:  null,
-  connected:    false,
+  config:      {},
+  layouts:     {},
+  currentPage: null,
+  rotateTimer: null,
+  connected:   false,
 };
 
 // ─── Socket.IO ───────────────────────────────────────────────────────────────
@@ -37,7 +35,6 @@ if (socket) {
   socket.on('stream:ready',    ({ id }) => StreamManager.onReady(id));
   socket.on('stream:stopped',  ({ id }) => StreamManager.onStopped(id));
 } else {
-  // Dev/offline fallback — use demo data
   init();
 }
 
@@ -47,9 +44,7 @@ async function init() {
   await fetchLayouts();
   applyConfig();
   renderPageTabs();
-  if (state.currentPage) {
-    LayoutManager.render(state.currentPage);
-  }
+  if (state.currentPage) LayoutManager.render(state.currentPage);
   SettingsPanel.init();
   bindTopbarEvents();
   startRotateIfNeeded();
@@ -66,11 +61,23 @@ async function fetchLayouts() {
   try {
     const r = await fetch('/api/layouts');
     state.layouts = await r.json();
-    // Set current page if needed
     const pages = Object.keys(state.layouts);
-    if (!state.currentPage || !state.layouts[state.currentPage]) {
-      state.currentPage = pages[0] || null;
+
+    // Determine which page to show:
+    // 1. Keep current page if it still exists
+    // 2. Use configured defaultPage if set and valid
+    // 3. Fall back to first page
+    if (state.currentPage && state.layouts[state.currentPage]) {
+      // keep current
+    } else {
+      const def = state.config.defaultPage;
+      if (def && state.layouts[def]) {
+        state.currentPage = def;
+      } else {
+        state.currentPage = pages[0] || null;
+      }
     }
+
     renderPageTabs();
     if (state.currentPage) {
       LayoutManager.render(state.currentPage);
@@ -88,6 +95,7 @@ function applyConfig() {
   const el = document.getElementById('app-name');
   if (el) el.textContent = state.config.title || 'WebCameras';
   startRotateIfNeeded();
+  updateDefaultPageIndicator();
 }
 
 // ─── Page Tabs ───────────────────────────────────────────────────────────────
@@ -96,29 +104,46 @@ export function renderPageTabs() {
   container.innerHTML = '';
   const pages = Object.keys(state.layouts);
 
-  if (pages.length === 0) {
-    showEmpty(true);
-    return;
-  }
+  if (pages.length === 0) { showEmpty(true); return; }
   showEmpty(false);
 
   for (const name of pages) {
     const layout = state.layouts[name];
+    const isDefault = name === state.config.defaultPage;
     const tab = document.createElement('button');
     tab.className = 'page-tab' + (name === state.currentPage ? ' active' : '');
+    tab.title = isDefault ? 'Default page (loads first)' : 'Click to view · right-click for options';
     tab.innerHTML = `
       <span class="tab-name">${layout.label || name}</span>
+      ${isDefault ? '<span class="tab-default-dot" title="Default page">●</span>' : ''}
       <span class="tab-del" data-name="${name}" title="Delete page">✕</span>`;
+
     tab.addEventListener('click', (e) => {
       if (e.target.classList.contains('tab-del')) return;
       switchPage(name);
     });
+
+    // Right-click / long-press → set as default
+    tab.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      setDefaultPage(name);
+    });
+
     tab.querySelector('.tab-del').addEventListener('click', (e) => {
       e.stopPropagation();
       confirmDeletePage(name);
     });
+
     container.appendChild(tab);
   }
+}
+
+function updateDefaultPageIndicator() {
+  document.querySelectorAll('.page-tab').forEach(tab => {
+    const nameEl = tab.querySelector('.tab-name');
+    if (!nameEl) return;
+    // rebuild tabs to update indicators
+  });
 }
 
 export function switchPage(name) {
@@ -128,10 +153,36 @@ export function switchPage(name) {
   resetRotate();
 }
 
+async function setDefaultPage(name) {
+  const label = state.layouts[name]?.label || name;
+  if (!confirm(`Set "${label}" as the default page that loads when opening the app?`)) return;
+  const cfg = { ...state.config, defaultPage: name };
+  await fetch('/api/config', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(cfg)
+  });
+  state.config = cfg;
+  renderPageTabs();
+  Toast.show(`"${label}" set as default page`, 'success');
+}
+
 function confirmDeletePage(name) {
   if (!confirm(`Delete layout page "${name}"? This cannot be undone.`)) return;
   fetch(`/api/layouts/${encodeURIComponent(name)}`, { method: 'DELETE' })
-    .then(() => { Toast.show(`Deleted: ${name}`); fetchLayouts(); });
+    .then(() => {
+      Toast.show(`Deleted: ${name}`);
+      // If this was the default, clear it
+      if (state.config.defaultPage === name) {
+        state.config.defaultPage = '';
+        fetch('/api/config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(state.config)
+        }).catch(() => {});
+      }
+      fetchLayouts();
+    });
 }
 
 // ─── Empty state ─────────────────────────────────────────────────────────────
@@ -153,9 +204,7 @@ function startRotateIfNeeded() {
   }, delay);
 }
 
-function resetRotate() {
-  startRotateIfNeeded();
-}
+function resetRotate() { startRotateIfNeeded(); }
 
 // ─── Topbar events ───────────────────────────────────────────────────────────
 function bindTopbarEvents() {
@@ -177,7 +226,6 @@ function bindTopbarEvents() {
     }
   });
 
-  // Camera fullscreen close
   document.getElementById('cam-fs-close').addEventListener('click', () => {
     StreamManager.closeFullscreen();
   });
@@ -190,27 +238,22 @@ function bindTopbarEvents() {
     if (e.key === 'ArrowRight') {
       const pages = Object.keys(state.layouts);
       if (pages.length < 2) return;
-      const idx = pages.indexOf(state.currentPage);
-      switchPage(pages[(idx + 1) % pages.length]);
+      switchPage(pages[(pages.indexOf(state.currentPage) + 1) % pages.length]);
     }
     if (e.key === 'ArrowLeft') {
       const pages = Object.keys(state.layouts);
       if (pages.length < 2) return;
-      const idx = pages.indexOf(state.currentPage);
-      switchPage(pages[(idx - 1 + pages.length) % pages.length]);
+      switchPage(pages[(pages.indexOf(state.currentPage) - 1 + pages.length) % pages.length]);
     }
   });
 }
 
-
 // ─── Mobile Navigation ───────────────────────────────────────────────────────
 export function mobileNav(mode, btn) {
   document.querySelectorAll('.mobile-nav-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-
+  if (btn) btn.classList.add('active');
   if (mode === 'settings') {
     SettingsPanel.open();
-    document.getElementById('mnav-view')?.classList.remove('active');
   } else {
     SettingsPanel.close();
     document.getElementById('mnav-view')?.classList.add('active');
@@ -220,18 +263,15 @@ export function mobileNav(mode, btn) {
 export function mobilePrevPage() {
   const pages = Object.keys(state.layouts);
   if (pages.length < 2) return;
-  const idx = pages.indexOf(state.currentPage);
-  switchPage(pages[(idx - 1 + pages.length) % pages.length]);
+  switchPage(pages[(pages.indexOf(state.currentPage) - 1 + pages.length) % pages.length]);
 }
 
 export function mobileNextPage() {
   const pages = Object.keys(state.layouts);
   if (pages.length < 2) return;
-  const idx = pages.indexOf(state.currentPage);
-  switchPage(pages[(idx + 1) % pages.length]);
+  switchPage(pages[(pages.indexOf(state.currentPage) + 1) % pages.length]);
 }
 
-// Expose to global scope for inline onclick handlers in mobile nav
-window.mobileNav     = mobileNav;
+window.mobileNav      = mobileNav;
 window.mobilePrevPage = mobilePrevPage;
 window.mobileNextPage = mobileNextPage;

@@ -159,107 +159,11 @@ nav{padding:12px 8px;flex:1}
 hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 .monospace{font-family:var(--mono)}
 
-/* ── Tablet ── */
-@media(max-width:900px){
-  #sidebar{ width:180px }
-  #main{ padding:24px 28px }
-}
-
-/* ── Mobile ── */
 @media(max-width:640px){
-  #shell{ flex-direction:column }
-
-  /* Hide sidebar — replaced by bottom tabs */
-  #sidebar{ display:none }
-
-  /* Main fills screen, leaves room for bottom nav */
-  #main{
-    padding:14px 14px 80px;
-    max-width:100%;
-  }
-
-  /* Grids go single column */
-  .field-row,.field-row4{ grid-template-columns:1fr }
-  .preset-grid{ grid-template-columns:repeat(2,1fr) }
-
-  /* Cards less padding */
-  .card{ padding:14px }
-  .card-title{ font-size:11px;margin-bottom:10px }
-
-  /* Touch-friendly inputs — prevents iOS zoom */
-  .field input[type=text],
-  .field input[type=number],
-  .field input[type=url],
-  .field input[type=password],
-  .field select,
-  .field textarea{ font-size:16px }
-
-  /* Buttons full-width on mobile */
-  .btn-row{ flex-direction:column }
-  .btn-row .btn{ width:100%;text-align:center;min-height:44px }
-
-  /* Camera cards stack better */
-  .cam-card{ flex-wrap:wrap }
-  .cam-actions{ width:100%;justify-content:flex-end;margin-top:6px }
-  .cam-actions .btn{ flex:1 }
-
-  /* Layout cards */
-  .layout-card-header{ flex-direction:column;align-items:flex-start;gap:8px }
-  .layout-card-header > div:last-child{ width:100%;display:flex;gap:6px }
-  .layout-card-header > div:last-child .btn{ flex:1 }
-
-  /* Window editor */
-  .win-row-header{ flex-wrap:wrap;gap:6px }
-
-  /* Toast full width */
-  #toast{ right:10px;left:10px;bottom:70px }
-  .toast-item{ max-width:100% }
-
-  /* Section title */
-  .section-title{ font-size:17px }
-  .section-sub{ font-size:12px }
-}
-
-/* ── Mobile bottom nav for config page ── */
-#config-mobile-nav{ display:none }
-
-@media(max-width:640px){
-  #config-mobile-nav{
-    display:flex;
-    position:fixed;
-    bottom:0;left:0;right:0;
-    height:58px;
-    background:var(--surface);
-    border-top:1px solid var(--border);
-    z-index:200;
-    align-items:stretch;
-  }
-  .cmnav-btn{
-    flex:1;
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-    justify-content:center;
-    gap:3px;
-    font-size:10px;
-    color:var(--text-muted);
-    background:none;
-    border:none;
-    cursor:pointer;
-    transition:color .15s;
-    -webkit-tap-highlight-color:transparent;
-    text-decoration:none;
-  }
-  .cmnav-btn .cmi{ font-size:20px;line-height:1 }
-  .cmnav-btn.active{ color:var(--accent) }
-  .cmnav-btn:active{ background:var(--surface2) }
-}
-
-/* ── Touch targets ── */
-@media(hover:none){
-  .btn{ min-height:44px }
-  .nav-item{ min-height:44px }
-  .preset-btn{ min-height:44px }
+  #sidebar{display:none}
+  #main{padding:16px}
+  .field-row,.field-row4{grid-template-columns:1fr}
+  .preset-grid{grid-template-columns:repeat(2,1fr)}
 }
 </style>
 </head>
@@ -311,6 +215,11 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
         <label>App / Page Title</label>
         <input type="text" id="cfg-title" placeholder="WebCameras">
         <span class="hint">Shown in the browser tab and top bar</span>
+      </div>
+      <div class="field">
+        <label>Default Layout Page</label>
+        <select id="cfg-defaultpage"><option value="">— First page in list —</option></select>
+        <span class="hint">Which layout loads first. Right-click any tab in the live view to set it too.</span>
       </div>
     </div>
 
@@ -382,41 +291,14 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
       </div>
       <div class="field">
         <label>Stream URL <span style="color:var(--red)">*</span></label>
-        <input type="text" id="cam-url" placeholder="rtsp://192.168.1.100:554/stream1"
-          oninput="updateUrlPreview()">
-        <span class="hint">Base URL only — do not include username or password here</span>
-      </div>
-      <div class="field-row">
-        <div class="field">
-          <label>Username</label>
-          <input type="text" id="cam-username" placeholder="admin" autocomplete="off"
-            oninput="updateUrlPreview()">
-          <span class="hint">Leave blank if no auth needed</span>
-        </div>
-        <div class="field">
-          <label>Password</label>
-          <div style="position:relative">
-            <input type="password" id="cam-password" placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;"
-              autocomplete="new-password" oninput="updateUrlPreview()"
-              style="width:100%;padding-right:38px">
-            <button type="button" onclick="togglePassVis()" title="Show/hide password"
-              id="pass-vis-btn"
-              style="position:absolute;right:8px;top:50%;transform:translateY(-50%);
-              font-size:13px;color:var(--text-muted);background:none;border:none;cursor:pointer">&#128065;</button>
-          </div>
-        </div>
-      </div>
-      <div id="url-preview-wrap" style="display:none;margin-bottom:4px">
-        <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Full URL sent to ffmpeg:</div>
-        <div id="url-preview" style="font-family:var(--mono);font-size:11px;color:var(--accent);
-          background:var(--surface2);border:1px solid var(--border);border-radius:4px;
-          padding:6px 10px;word-break:break-all"></div>
+        <input type="text" id="cam-url" placeholder="rtsp://192.168.1.100:554/stream1">
+        <span class="hint">rtsp://, http://, or mjpeg://</span>
       </div>
       <div class="field-row">
         <div class="field">
           <label>Stream Type</label>
           <select id="cam-type">
-            <option value="rtsp">RTSP &#8594; HLS (server transcode)</option>
+            <option value="rtsp">RTSP → HLS (server transcode)</option>
             <option value="hls">HLS direct (.m3u8)</option>
             <option value="mjpeg">MJPEG (direct)</option>
           </select>
@@ -426,29 +308,6 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
           <select id="cam-transport">
             <option value="tcp">TCP (recommended)</option>
             <option value="udp">UDP</option>
-          </select>
-        </div>
-      </div>
-      <div class="field-row">
-        <div class="field">
-          <label>Transcode Output Resolution</label>
-          <select id="cam-resolution">
-            <option value="1080">1080p — Full HD (recommended)</option>
-            <option value="720">720p — HD (lower CPU)</option>
-            <option value="480">480p — SD (minimal CPU)</option>
-            <option value="2160">2160p — 4K (very high CPU)</option>
-            <option value="source">Source resolution (H.264 only)</option>
-          </select>
-          <span class="hint">H.265/HEVC cameras must transcode — browsers can't play H.265</span>
-        </div>
-        <div class="field">
-          <label>Video Bitrate</label>
-          <select id="cam-bitrate">
-            <option value="2500">2500k — Good quality</option>
-            <option value="1500">1500k — Balanced</option>
-            <option value="800">800k — Low bandwidth</option>
-            <option value="4000">4000k — High quality</option>
-            <option value="6000">6000k — Maximum</option>
           </select>
         </div>
       </div>
@@ -500,25 +359,6 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 <!-- Toast container -->
 <div id="toast"></div>
 
-<!-- Mobile bottom nav -->
-<nav id="config-mobile-nav">
-  <button class="cmnav-btn active" onclick="mobileShowSec('global',this)">
-    <span class="cmi">⚙</span><span>General</span>
-  </button>
-  <button class="cmnav-btn" onclick="mobileShowSec('cameras',this)">
-    <span class="cmi">📷</span><span>Cameras</span>
-  </button>
-  <button class="cmnav-btn" onclick="mobileShowSec('layouts',this)">
-    <span class="cmi">▦</span><span>Layouts</span>
-  </button>
-  <button class="cmnav-btn" onclick="mobileShowSec('status',this)">
-    <span class="cmi">📊</span><span>Status</span>
-  </button>
-  <a href="/" class="cmnav-btn">
-    <span class="cmi">⬡</span><span>View</span>
-  </a>
-</nav>
-
 <script>
 // ─── State ────────────────────────────────────────────────────────────────
 let config = {};
@@ -568,6 +408,7 @@ async function loadConfig() {
     document.getElementById('cfg-feedsleep').value   = config.feedsleep   || 2;
     document.getElementById('cfg-retry').value       = config.retry       || 3;
     document.getElementById('logo-text').textContent = config.title || 'WebCameras';
+    populateDefaultPageSelect(config.defaultPage || '');
   } catch(e) { toast('Failed to load config', 'err'); }
 }
 
@@ -579,6 +420,7 @@ async function saveGlobal() {
     startsleep:  parseInt(document.getElementById('cfg-startsleep').value)  || 2,
     feedsleep:   parseInt(document.getElementById('cfg-feedsleep').value)   || 2,
     retry:       parseInt(document.getElementById('cfg-retry').value)       || 3,
+    defaultPage: document.getElementById('cfg-defaultpage').value || '',
   };
   try {
     await fetch('/api/config', {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfg)});
@@ -641,15 +483,8 @@ function openAddCamera() {
   document.getElementById('cam-id').readOnly = false;
   document.getElementById('cam-label').value = '';
   document.getElementById('cam-url').value = '';
-  document.getElementById('cam-username').value = '';
-  document.getElementById('cam-password').value = '';
-  document.getElementById('cam-password').type = 'password';
-  document.getElementById('pass-vis-btn').textContent = '\u{1F441}';
   document.getElementById('cam-type').value = 'rtsp';
   document.getElementById('cam-transport').value = 'tcp';
-  document.getElementById('cam-resolution').value = '1080';
-  document.getElementById('cam-bitrate').value = '2500';
-  document.getElementById('url-preview-wrap').style.display = 'none';
   populatePageSelect('cam-page', Object.keys(layouts)[0]);
   document.getElementById('cam-test-result').style.display='none';
   document.getElementById('cam-form-card').style.display='block';
@@ -665,15 +500,8 @@ function openEditCamera(id) {
   document.getElementById('cam-id').readOnly = true;
   document.getElementById('cam-label').value = cam.label||'';
   document.getElementById('cam-url').value = cam.url||'';
-  document.getElementById('cam-username').value = cam.username||'';
-  document.getElementById('cam-password').value = cam.password||'';
-  document.getElementById('cam-password').type = 'password';
-  document.getElementById('pass-vis-btn').textContent = '\u{1F441}';
   document.getElementById('cam-type').value = cam.type||'rtsp';
   document.getElementById('cam-transport').value = cam.transport||'tcp';
-  document.getElementById('cam-resolution').value = cam.resolution||'1080';
-  document.getElementById('cam-bitrate').value = cam.bitrate||'2500';
-  updateUrlPreview();
   // Find which page this camera is on
   let page = Object.keys(layouts)[0];
   for (const [n,l] of Object.entries(layouts))
@@ -690,18 +518,12 @@ function closeCamForm() {
 
 async function saveCamera() {
   const editId = document.getElementById('cam-edit-id').value;
-  const username = document.getElementById('cam-username').value.trim();
-  const password = document.getElementById('cam-password').value;
   const cam = {
     id:        document.getElementById('cam-id').value.trim().replace(/\s+/g,'-'),
     label:     document.getElementById('cam-label').value.trim(),
-    url:        document.getElementById('cam-url').value.trim(),
-    username:   username,
-    password:   password,
-    type:       document.getElementById('cam-type').value,
-    transport:  document.getElementById('cam-transport').value,
-    resolution: document.getElementById('cam-resolution').value,
-    bitrate:    document.getElementById('cam-bitrate').value,
+    url:       document.getElementById('cam-url').value.trim(),
+    type:      document.getElementById('cam-type').value,
+    transport: document.getElementById('cam-transport').value,
   };
   if (!cam.id || !cam.url) { toast('ID and URL are required','err'); return; }
 
@@ -754,16 +576,12 @@ async function deleteCamera(id) {
 }
 
 async function testCamera() {
-  const url = buildAuthUrl(
-    document.getElementById('cam-url').value.trim(),
-    document.getElementById('cam-username').value.trim(),
-    document.getElementById('cam-password').value
-  );
+  const url = document.getElementById('cam-url').value.trim();
   const transport = document.getElementById('cam-transport').value;
   const res = document.getElementById('cam-test-result');
   res.style.display='block';
   res.style.color='var(--text-muted)';
-  res.textContent='⏳ Testing connection…';
+  res.textContent='⏳ Testing…';
   try {
     const r = await fetch('/api/test-stream',{method:'POST',
       headers:{'Content-Type':'application/json'},body:JSON.stringify({url,transport})});
@@ -771,57 +589,6 @@ async function testCamera() {
     if (d.ok) { res.style.color='var(--accent)'; res.textContent='✓ Connection successful'; }
     else       { res.style.color='var(--red)';    res.textContent='✗ '+(d.error||'Failed'); }
   } catch { res.style.color='var(--red)'; res.textContent='✗ Server error'; }
-}
-
-// Build URL with credentials embedded: rtsp://user:pass@host/path
-function buildAuthUrl(url, username, password) {
-  if (!url || !username) return url;
-  try {
-    const u = new URL(url);
-    u.username = encodeURIComponent(username);
-    u.password = encodeURIComponent(password || '');
-    return u.toString();
-  } catch {
-    // Fallback: manual inject for non-standard URLs
-    const proto = url.match(/^([a-z]+:\/\/)/i);
-    if (proto) {
-      const rest = url.slice(proto[1].length);
-      const pass = password ? `:${encodeURIComponent(password)}` : '';
-      return `${proto[1]}${encodeURIComponent(username)}${pass}@${rest}`;
-    }
-    return url;
-  }
-}
-
-// Show live preview of the full URL as user types
-function updateUrlPreview() {
-  const url      = document.getElementById('cam-url').value.trim();
-  const username = document.getElementById('cam-username').value.trim();
-  const password = document.getElementById('cam-password').value;
-  const wrap = document.getElementById('url-preview-wrap');
-  const prev = document.getElementById('url-preview');
-  if (url && username) {
-    const full = buildAuthUrl(url, username, password);
-    // Mask password in preview display
-    const masked = full.replace(/:([^@]+)@/, ':<span style="color:var(--text-dim)">••••••</span>@');
-    wrap.style.display = 'block';
-    prev.innerHTML = masked;
-  } else {
-    wrap.style.display = url ? 'block' : 'none';
-    prev.innerHTML = url || '';
-  }
-}
-
-function togglePassVis() {
-  const inp = document.getElementById('cam-password');
-  const btn = document.getElementById('pass-vis-btn');
-  if (inp.type === 'password') {
-    inp.type = 'text';
-    btn.textContent = '🙈';
-  } else {
-    inp.type = 'password';
-    btn.textContent = '\u{1F441}';
-  }
 }
 
 // ─── Layout List ──────────────────────────────────────────────────────────
@@ -1220,29 +987,21 @@ function toast(msg, type='', ms=3000) {
     setTimeout(()=>el.remove(),300); }, ms);
 }
 
-// Mobile nav — mirrors showSection but also updates bottom tab bar
-function mobileShowSec(name, btn) {
-  // Update sidebar nav
-  const sideBtn = document.querySelector(`.nav-item[data-sec="${name}"]`);
-  if (sideBtn) showSection(name, sideBtn);
-
-  // Update bottom tab active state
-  document.querySelectorAll('.cmnav-btn').forEach(b => b.classList.remove('active'));
-  if (btn) btn.classList.add('active');
-
-  // Scroll to top of main
-  document.getElementById('main').scrollTo({ top: 0, behavior: 'smooth' });
+function populateDefaultPageSelect(currentDefault) {
+  const sel = document.getElementById('cfg-defaultpage');
+  const pages = Object.keys(layouts);
+  sel.innerHTML = '<option value="">— First page in list —</option>' +
+    pages.map(n =>
+      `<option value="${esc(n)}" ${n === currentDefault ? 'selected' : ''}>${esc(layouts[n].label || n)}</option>`
+    ).join('');
 }
 
-// Keep sidebar and bottom nav in sync
-const _origShowSection = showSection;
-showSection = function(name, btn) {
-  _origShowSection(name, btn);
-  // Sync bottom nav
-  document.querySelectorAll('.cmnav-btn').forEach(b => {
-    const match = b.getAttribute('onclick')?.includes(`'${name}'`);
-    b.classList.toggle('active', !!match);
-  });
+// Re-populate default page select when layouts change
+const _origRenderLayoutList = renderLayoutList;
+renderLayoutList = function() {
+  _origRenderLayoutList();
+  const currentDefault = document.getElementById('cfg-defaultpage')?.value || '';
+  populateDefaultPageSelect(currentDefault);
 };
 
 init();

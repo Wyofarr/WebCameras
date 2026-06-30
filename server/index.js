@@ -4,13 +4,13 @@
  * Inspired by displaycameras (github.com/Anonymousdog/displaycameras)
  */
 
-const express  = require('express');
-const http     = require('http');
+const express    = require('express');
+const http       = require('http');
 const { Server } = require('socket.io');
-const path     = require('path');
-const fs       = require('fs');
-const { spawn } = require('child_process');
-const chokidar = require('chokidar');
+const path       = require('path');
+const fs         = require('fs');
+const { spawn }  = require('child_process');
+const chokidar   = require('chokidar');
 
 const CONFIG_PATH = process.env.CONFIG_PATH || path.join(__dirname, '../config');
 const PORT        = process.env.PORT || 8080;
@@ -28,14 +28,13 @@ app.use('/hls', express.static(HLS_DIR, {
     res.set('Access-Control-Allow-Origin', '*');
   }
 }));
-
 fs.mkdirSync(HLS_DIR, { recursive: true });
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
 function loadConfig() {
   const defaults = { title:'WebCameras', rotate:false, rotatedelay:30,
-    startsleep:2, feedsleep:2, retry:3 };
+    startsleep:2, feedsleep:2, retry:3, defaultPage:'' };
   try {
     return { ...defaults,
       ...JSON.parse(fs.readFileSync(path.join(CONFIG_PATH,'webcameras.conf.json'),'utf8')) };
@@ -58,17 +57,16 @@ function loadLayouts() {
 }
 
 function saveLayout(name, data) {
-  fs.writeFileSync(path.join(CONFIG_PATH, `layout.${name}.json`), JSON.stringify(data, null, 2));
+  fs.writeFileSync(path.join(CONFIG_PATH,`layout.${name}.json`), JSON.stringify(data,null,2));
 }
 
 function deleteLayout(name) {
-  const file = path.join(CONFIG_PATH, `layout.${name}.json`);
+  const file = path.join(CONFIG_PATH,`layout.${name}.json`);
   if (fs.existsSync(file)) fs.unlinkSync(file);
 }
 
 // ─── Camera registry ─────────────────────────────────────────────────────────
-// Keep a persistent map of all known cameras so streams can restart
-// even after their layout page is deleted.
+// Maintained independently of layouts so streams survive layout deletion.
 const cameraRegistry = new Map(); // id → camera object
 
 function refreshCameraRegistry() {
@@ -104,35 +102,18 @@ function buildAuthUrl(url, username, password) {
   }
 }
 
-/**
- * Build ffmpeg filter for scaling + padding to exact window aspect ratio.
- * windowW/windowH are the 0–1 ratio fractions from the layout config.
- * We compute the target pixel aspect ratio and pad with black bars.
- */
 function buildVideoFilter(resolution, windowW, windowH) {
   const h = parseInt(resolution) || 1080;
-
-  // If we have window dimensions, compute target aspect ratio and pad
   if (windowW && windowH && windowW > 0 && windowH > 0) {
-    const aspect = windowW / windowH;
-    // Target dimensions: height fixed, width derived from aspect ratio
-    // Must be divisible by 2 for libx264
+    const aspect  = windowW / windowH;
     const targetH = h;
     const targetW = Math.round(targetH * aspect / 2) * 2;
-
-    // Scale to fit inside target box preserving source aspect, then pad
     return [
       '-vf',
-      // 1. Scale so the video fits within targetW x targetH (letterbox/pillarbox)
       `scale=${targetW}:${targetH}:force_original_aspect_ratio=decrease,` +
-      // 2. Pad to exact target dimensions with black
-      `pad=${targetW}:${targetH}:(ow-iw)/2:(oh-ih)/2:black,` +
-      // 3. Ensure even dimensions
-      `setsar=1`
+      `pad=${targetW}:${targetH}:(ow-iw)/2:(oh-ih)/2:black,setsar=1`
     ];
   }
-
-  // No window info — just scale height, keep aspect
   return ['-vf', `scale=-2:${h}`];
 }
 
@@ -140,9 +121,9 @@ function buildFfmpegArgs(camera, url, dir) {
   const transport  = camera.transport  || 'tcp';
   const resolution = camera.resolution || '1080';
   const bitrate    = parseInt(camera.bitrate) || 2500;
-  const playlist   = path.join(dir, 'stream.m3u8');
   const windowW    = camera.windowW;
   const windowH    = camera.windowH;
+  const playlist   = path.join(dir, 'stream.m3u8');
 
   const videoArgs = resolution === 'source'
     ? ['-c:v', 'copy']
@@ -161,7 +142,6 @@ function buildFfmpegArgs(camera, url, dir) {
 
   return [
     '-hide_banner', '-loglevel', 'warning',
-    // Low-latency input options
     '-fflags', 'nobuffer',
     '-flags', 'low_delay',
     '-rtsp_transport', transport,
@@ -170,9 +150,9 @@ function buildFfmpegArgs(camera, url, dir) {
     ...videoArgs,
     '-c:a', 'aac',
     '-b:a', '96k',
-    '-ac', '1',              // mono audio — saves bandwidth
+    '-ac', '1',
     '-f', 'hls',
-    '-hls_time', '1',        // 1s segments = faster first-frame
+    '-hls_time', '1',
     '-hls_list_size', '6',
     '-hls_flags', 'delete_segments+append_list+omit_endlist+split_by_time',
     '-hls_segment_type', 'mpegts',
@@ -186,18 +166,19 @@ function startStream(camera) {
   const { id } = camera;
   const url = buildAuthUrl(camera.url, camera.username, camera.password);
 
-  // Register camera so we can restart it even if layout is deleted
+  // Always update registry with latest camera config
   cameraRegistry.set(id, camera);
 
   if (activeStreams.has(id)) {
     activeStreams.get(id).clients++;
+    console.log(`[stream] Reusing existing stream: ${id} (clients: ${activeStreams.get(id).clients})`);
     return;
   }
 
   const dir = getStreamDir(id);
   fs.mkdirSync(dir, { recursive: true });
 
-  // Clean up old stale segments for faster startup
+  // Wipe stale segments for clean startup
   try {
     fs.readdirSync(dir).forEach(f => {
       if (f.endsWith('.ts') || f.endsWith('.m3u8'))
@@ -206,7 +187,6 @@ function startStream(camera) {
   } catch {}
 
   const args = buildFfmpegArgs(camera, url, dir);
-
   console.log(`[stream] Starting: ${id}`);
   const proc = spawn('ffmpeg', args, { detached: false });
 
@@ -220,7 +200,7 @@ function startStream(camera) {
     activeStreams.delete(id);
     io.emit('stream:stopped', { id });
 
-    // Auto-restart — use camera registry so deleted layouts don't break restart
+    // Auto-restart using registry — survives layout deletion
     setTimeout(() => {
       if (io.sockets.sockets.size > 0) {
         const cam = cameraRegistry.get(id);
@@ -234,25 +214,23 @@ function startStream(camera) {
 
   activeStreams.set(id, { process: proc, clients: 1, startedAt: Date.now(), camera });
 
-  // Watch for first segment to signal ready — faster than waiting for m3u8
+  // Signal ready on first .ts segment — faster than waiting for m3u8
   let ready = false;
   const watcher = fs.watch(dir, (event, filename) => {
     if (!ready && filename && filename.endsWith('.ts')) {
       ready = true;
-      watcher.close();
-      // Small delay so the m3u8 has the segment listed
+      try { watcher.close(); } catch {}
       setTimeout(() => io.emit('stream:ready', { id }), 300);
     }
   });
-
-  // Fallback: signal ready after 8s even if no segment appeared
+  // Fallback after 10s
   setTimeout(() => {
     if (!ready) {
       ready = true;
       try { watcher.close(); } catch {}
       io.emit('stream:ready', { id });
     }
-  }, 8000);
+  }, 10000);
 }
 
 function stopStream(id) {
@@ -260,13 +238,11 @@ function stopStream(id) {
   if (!s) return;
   s.clients = Math.max(0, s.clients - 1);
   if (s.clients <= 0) {
-    console.log(`[stream] Stopping: ${id}`);
+    console.log(`[stream] Killing: ${id}`);
     s.process.kill('SIGTERM');
     activeStreams.delete(id);
     const dir = getStreamDir(id);
-    setTimeout(() => {
-      try { fs.rmSync(dir, { recursive: true }); } catch {}
-    }, 2000);
+    setTimeout(() => { try { fs.rmSync(dir, { recursive: true }); } catch {} }, 2000);
   }
 }
 
@@ -286,7 +262,7 @@ app.get('/api/layouts', (req, res) => res.json(loadLayouts()));
 app.get('/api/layouts/:name', (req, res) => {
   const layouts = loadLayouts();
   const layout = layouts[req.params.name];
-  if (!layout) return res.status(404).json({ error: 'Not found' });
+  if (!layout) return res.status(404).json({ error:'Not found' });
   res.json(layout);
 });
 
@@ -294,34 +270,34 @@ app.put('/api/layouts/:name', (req, res) => {
   saveLayout(req.params.name, req.body);
   refreshCameraRegistry();
   io.emit('layouts:updated');
-  res.json({ ok: true });
+  res.json({ ok:true });
 });
 
 app.delete('/api/layouts/:name', (req, res) => {
   deleteLayout(req.params.name);
-  // Do NOT clear registry — cameras may still be streaming on other pages
+  // Do NOT clear registry — cameras may still be on other pages
   io.emit('layouts:updated');
-  res.json({ ok: true });
+  res.json({ ok:true });
 });
 
 app.post('/api/streams/:cameraId/start', (req, res) => {
   const { url, transport, username, password, resolution, bitrate, windowW, windowH } = req.body;
-  if (!url) return res.status(400).json({ error: 'url required' });
-  startStream({ id: req.params.cameraId, url, transport, username, password,
+  if (!url) return res.status(400).json({ error:'url required' });
+  startStream({ id:req.params.cameraId, url, transport, username, password,
     resolution, bitrate, windowW, windowH });
-  res.json({ ok: true, hlsUrl: `/hls/${req.params.cameraId}/stream.m3u8` });
+  res.json({ ok:true, hlsUrl:`/hls/${req.params.cameraId}/stream.m3u8` });
 });
 
 app.post('/api/streams/:cameraId/stop', (req, res) => {
   stopStream(req.params.cameraId);
-  res.json({ ok: true });
+  res.json({ ok:true });
 });
 
 app.get('/api/streams', (req, res) => {
   const result = {};
   for (const [id, s] of activeStreams) {
-    result[id] = { clients: s.clients, startedAt: s.startedAt,
-      hlsUrl: `/hls/${id}/stream.m3u8` };
+    result[id] = { clients:s.clients, startedAt:s.startedAt,
+      hlsUrl:`/hls/${id}/stream.m3u8` };
   }
   res.json(result);
 });
@@ -331,22 +307,17 @@ app.post('/api/test-stream', (req, res) => {
   const url = buildAuthUrl(req.body.url, req.body.username, req.body.password);
   let done = false;
   const proc = spawn('ffprobe', [
-    '-rtsp_transport', transport,
-    '-i', url,
-    '-v', 'quiet',
-    '-print_format', 'json',
-    '-show_streams'
+    '-rtsp_transport', transport, '-i', url,
+    '-v', 'quiet', '-print_format', 'json', '-show_streams'
   ]);
   let out = '';
   proc.stdout.on('data', d => out += d);
   proc.on('exit', code => {
     if (done) return; done = true;
     if (code === 0) {
-      try { res.json({ ok:true, info: JSON.parse(out) }); }
+      try { res.json({ ok:true, info:JSON.parse(out) }); }
       catch { res.json({ ok:true }); }
-    } else {
-      res.json({ ok:false, error:'Could not connect to stream' });
-    }
+    } else { res.json({ ok:false, error:'Could not connect to stream' }); }
   });
   setTimeout(() => {
     if (done) return; done = true;
@@ -355,31 +326,23 @@ app.post('/api/test-stream', (req, res) => {
   }, 8000);
 });
 
-app.get('/config', (req, res) => {
-  res.sendFile(path.join(__dirname, '../public/config.html'));
-});
+app.get('/config', (req, res) =>
+  res.sendFile(path.join(__dirname, '../public/config.html')));
 
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../public/index.html'));
-});
+app.get('*', (req, res) =>
+  res.sendFile(path.join(__dirname, '../public/index.html')));
 
 // ─── Socket.IO ───────────────────────────────────────────────────────────────
 
 io.on('connection', (socket) => {
   console.log(`[ws] Client connected: ${socket.id}`);
-  socket.on('disconnect', () => {
-    console.log(`[ws] Client disconnected: ${socket.id}`);
-  });
+  socket.on('disconnect', () => console.log(`[ws] Client disconnected: ${socket.id}`));
 });
-
-// ─── Config watcher ──────────────────────────────────────────────────────────
 
 chokidar.watch(CONFIG_PATH, { ignoreInitial: true }).on('all', () => {
   refreshCameraRegistry();
   io.emit('layouts:updated');
 });
-
-// ─── Start ───────────────────────────────────────────────────────────────────
 
 refreshCameraRegistry();
 

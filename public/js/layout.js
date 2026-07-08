@@ -38,10 +38,14 @@ export const LayoutManager = {
       grid.appendChild(cell.el);
       this._cells.set(win.cameraId || win.id, cell);
 
-      // Find camera config and start stream
+      // Find camera config and start stream — pass window dims for black bar padding
       const cam = this._findCamera(win.cameraId || win.id, layout);
       if (cam) {
-        StreamManager.attach(cam, cell.video, cell.overlay);
+        StreamManager.attach(
+          { ...cam, windowW: win.w, windowH: win.h },
+          cell.video,
+          cell.overlay
+        );
       }
     }
   },

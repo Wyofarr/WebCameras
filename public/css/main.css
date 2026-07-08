@@ -104,13 +104,6 @@ a { color: var(--accent); }
   color: var(--accent);
   border-bottom-color: var(--accent);
 }
-.tab-default-dot {
-  font-size: 8px;
-  color: var(--accent);
-  line-height: 1;
-  flex-shrink: 0;
-}
-
 .page-tab .tab-del {
   opacity: 0;
   font-size: 10px;

@@ -165,6 +165,37 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
   .field-row,.field-row4{grid-template-columns:1fr}
   .preset-grid{grid-template-columns:repeat(2,1fr)}
 }
+
+/* About section */
+:root{ --yellow:#e3b341 }
+#about-sysinfo span{ word-break:break-all }
+
+/* Mobile bottom nav */
+#config-mobile-nav{ display:none }
+@media(max-width:640px){
+  #config-mobile-nav{
+    display:flex;position:fixed;bottom:0;left:0;right:0;height:58px;
+    background:var(--surface);border-top:1px solid var(--border);z-index:200;align-items:stretch
+  }
+  .cmnav-btn{
+    flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:3px;font-size:10px;color:var(--text-muted);background:none;border:none;cursor:pointer;
+    transition:color .15s;-webkit-tap-highlight-color:transparent;text-decoration:none
+  }
+  .cmnav-btn .cmi{ font-size:18px;line-height:1 }
+  .cmnav-btn.active{ color:var(--accent) }
+  .cmnav-btn:active{ background:var(--surface2) }
+  #main{ padding-bottom:70px }
+  .field-row,.field-row4{ grid-template-columns:1fr }
+  .preset-grid{ grid-template-columns:repeat(2,1fr) }
+  .field input,.field select,.field textarea{ font-size:16px }
+  .btn-row{ flex-direction:column }
+  .btn-row .btn{ width:100%;min-height:44px;text-align:center }
+}
+@media(hover:none){
+  .btn{ min-height:44px }
+  .nav-item{ min-height:44px }
+}
 </style>
 </head>
 <body>
@@ -193,6 +224,9 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
     <div class="nav-section" style="margin-top:8px">System</div>
     <button class="nav-item" data-sec="status" onclick="showSection('status',this)">
       <span class="icon">📊</span> Status
+    </button>
+    <button class="nav-item" data-sec="about" onclick="showSection('about',this)">
+      <span class="icon">ℹ</span> About
     </button>
   </nav>
   <div id="sidebar-footer">
@@ -353,11 +387,92 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
     </div>
   </div>
 
+  <!-- ── About ─────────────────────────────────────────────────────────── -->
+  <div class="section" id="sec-about">
+    <div class="section-title">About</div>
+    <div class="section-sub">WebCameras — Web-based IP camera display system</div>
+
+    <div class="card">
+      <div class="card-title">Version</div>
+      <div id="about-version-block" style="display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <div>
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:3px">Installed Version</div>
+            <div id="about-local-ver" style="font-family:var(--mono);font-size:28px;font-weight:700;color:var(--accent)">—</div>
+          </div>
+          <div id="about-update-block" style="display:none">
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:3px">Latest Available</div>
+            <div id="about-latest-ver" style="font-family:var(--mono);font-size:28px;font-weight:700;color:var(--yellow)">—</div>
+          </div>
+        </div>
+        <div id="about-status-msg" style="font-size:13px;color:var(--text-muted)">Checking for updates…</div>
+        <div id="about-update-notice" style="display:none;background:rgba(227,179,65,0.1);
+          border:1px solid var(--yellow);border-radius:6px;padding:12px 14px">
+          <div style="font-weight:600;color:var(--yellow);margin-bottom:4px">⬆ Update Available</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">
+            Run <code style="font-family:var(--mono);background:var(--surface2);
+            padding:2px 6px;border-radius:3px">update</code> in the container console to upgrade automatically.
+          </div>
+        </div>
+        <div id="about-current-notice" style="display:none;background:var(--accent-glow);
+          border:1px solid var(--accent-dim);border-radius:6px;padding:12px 14px;
+          font-size:13px;color:var(--accent)">
+          ✓ You are running the latest version
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">System</div>
+      <div id="about-sysinfo" style="font-family:var(--mono);font-size:12px;
+        color:var(--text-muted);line-height:2.2;display:grid;
+        grid-template-columns:140px 1fr;row-gap:2px">
+        <span style="color:var(--text-dim)">Node.js</span><span id="si-node">—</span>
+        <span style="color:var(--text-dim)">Platform</span><span id="si-platform">—</span>
+        <span style="color:var(--text-dim)">Config path</span><span id="si-config">/etc/webcameras/</span>
+        <span style="color:var(--text-dim)">HLS path</span><span id="si-hls">/tmp/webcameras/hls/</span>
+        <span style="color:var(--text-dim)">Active streams</span><span id="si-streams">—</span>
+        <span style="color:var(--text-dim)">Layouts</span><span id="si-layouts">—</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Credits</div>
+      <div style="font-size:13px;color:var(--text-muted);line-height:1.8">
+        Inspired by <a href="https://github.com/Anonymousdog/displaycameras" target="_blank">displaycameras</a>
+        by Anonymousdog.<br>
+        Streams RTSP/HEVC cameras to any HTML5 browser via ffmpeg HLS transcoding.<br>
+        Built on Node.js, Express, Socket.IO, and HLS.js.
+      </div>
+    </div>
+  </div>
+
 </main>
 </div>
 
 <!-- Toast container -->
 <div id="toast"></div>
+
+<nav id="config-mobile-nav">
+  <button class="cmnav-btn active" onclick="mobileShowSec('global',this)">
+    <span class="cmi">⚙</span><span>General</span>
+  </button>
+  <button class="cmnav-btn" onclick="mobileShowSec('cameras',this)">
+    <span class="cmi">📷</span><span>Cameras</span>
+  </button>
+  <button class="cmnav-btn" onclick="mobileShowSec('layouts',this)">
+    <span class="cmi">▦</span><span>Layouts</span>
+  </button>
+  <button class="cmnav-btn" onclick="mobileShowSec('status',this)">
+    <span class="cmi">📊</span><span>Status</span>
+  </button>
+  <button class="cmnav-btn" onclick="mobileShowSec('about',this)">
+    <span class="cmi">ℹ</span><span>About</span>
+  </button>
+  <a href="/" class="cmnav-btn">
+    <span class="cmi">⬡</span><span>View</span>
+  </a>
+</nav>
 
 <script>
 // ─── State ────────────────────────────────────────────────────────────────
@@ -394,6 +509,7 @@ function showSection(name, btn) {
   document.getElementById('sec-' + name).classList.add('active');
   btn.classList.add('active');
   if (name === 'status') pollStatus();
+  if (name === 'about') loadAbout();
 }
 
 // ─── Config ───────────────────────────────────────────────────────────────
@@ -927,6 +1043,51 @@ async function deleteLayout(name) {
   toast('Layout deleted');
 }
 
+// ─── About ────────────────────────────────────────────────────────────────
+async function loadAbout() {
+  try {
+    const r = await fetch('/api/version');
+    const data = await r.json();
+
+    document.getElementById('about-local-ver').textContent = 'v' + data.version;
+
+    if (data.latest) {
+      document.getElementById('about-latest-ver').textContent = 'v' + data.latest;
+
+      if (data.upToDate) {
+        document.getElementById('about-status-msg').style.display = 'none';
+        document.getElementById('about-current-notice').style.display = 'block';
+        document.getElementById('about-update-notice').style.display = 'none';
+        document.getElementById('about-update-block').style.display = 'none';
+      } else {
+        document.getElementById('about-status-msg').style.display = 'none';
+        document.getElementById('about-update-block').style.display = 'block';
+        document.getElementById('about-update-notice').style.display = 'block';
+        document.getElementById('about-current-notice').style.display = 'none';
+      }
+    } else {
+      document.getElementById('about-status-msg').textContent =
+        data.repo
+          ? 'Could not reach GitHub to check for updates'
+          : 'Set repository URL in package.json to enable update checks';
+      document.getElementById('about-update-block').style.display = 'none';
+    }
+  } catch(e) {
+    document.getElementById('about-status-msg').textContent = 'Error fetching version info';
+  }
+
+  // System info
+  try {
+    const [sr, cr] = await Promise.all([fetch('/api/streams'), fetch('/api/config')]);
+    const streams = await sr.json();
+    document.getElementById('si-node').textContent = typeof process !== 'undefined'
+      ? '(server-side)' : navigator.userAgent.includes('Node') ? 'Node.js' : 'Browser client';
+    document.getElementById('si-platform').textContent = navigator.platform || '—';
+    document.getElementById('si-streams').textContent = Object.keys(streams).length + ' active';
+    document.getElementById('si-layouts').textContent = Object.keys(layouts).length + ' pages';
+  } catch {}
+}
+
 // ─── Status ───────────────────────────────────────────────────────────────
 async function pollStatus() {
   try {
@@ -985,6 +1146,14 @@ function toast(msg, type='', ms=3000) {
   c.appendChild(el);
   setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .3s';
     setTimeout(()=>el.remove(),300); }, ms);
+}
+
+function mobileShowSec(name, btn) {
+  const sideBtn = document.querySelector(`.nav-item[data-sec="${name}"]`);
+  if (sideBtn) showSection(name, sideBtn);
+  document.querySelectorAll('.cmnav-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  document.getElementById('main').scrollTo({top:0,behavior:'smooth'});
 }
 
 function populateDefaultPageSelect(currentDefault) {

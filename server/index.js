@@ -11,6 +11,7 @@ const path       = require('path');
 const fs         = require('fs');
 const { spawn }  = require('child_process');
 const chokidar   = require('chokidar');
+const pkg       = require('../package.json');
 
 const CONFIG_PATH = process.env.CONFIG_PATH || path.join(__dirname, '../config');
 const PORT        = process.env.PORT || 8080;
@@ -326,6 +327,50 @@ app.post('/api/test-stream', (req, res) => {
   }, 8000);
 });
 
+app.get('/api/version', async (req, res) => {
+  // Return local version and optionally check GitHub for latest
+  const local = pkg.version;
+  let latest = null;
+  let repo    = null;
+
+  try {
+    const repoUrl = pkg.repository?.url || '';
+    // Extract owner/repo from git url
+    const match = repoUrl.match(/github\.com[/:]([^/]+\/[^/.]+)/);
+    if (match) {
+      repo = match[1].replace(/\.git$/, '');
+      const https = require('https');
+      latest = await new Promise((resolve) => {
+        const options = {
+          hostname: 'api.github.com',
+          path: `/repos/${repo}/releases/latest`,
+          headers: { 'User-Agent': 'webcameras' },
+          timeout: 5000
+        };
+        const req2 = https.get(options, (r) => {
+          let data = '';
+          r.on('data', d => data += d);
+          r.on('end', () => {
+            try {
+              const json = JSON.parse(data);
+              resolve(json.tag_name ? json.tag_name.replace(/^v/, '') : null);
+            } catch { resolve(null); }
+          });
+        });
+        req2.on('error', () => resolve(null));
+        req2.on('timeout', () => { req2.destroy(); resolve(null); });
+      });
+    }
+  } catch { latest = null; }
+
+  res.json({
+    version: local,
+    latest:  latest,
+    repo:    repo,
+    upToDate: latest ? local === latest : null
+  });
+});
+
 app.get('/config', (req, res) =>
   res.sendFile(path.join(__dirname, '../public/config.html')));
 
@@ -348,7 +393,7 @@ refreshCameraRegistry();
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`\n╔══════════════════════════════════════╗`);
-  console.log(`║  WebCameras running on port ${PORT}     ║`);
+  console.log(`║  WebCameras ${pkg.version} — port ${PORT}    ║`);
   console.log(`╚══════════════════════════════════════╝\n`);
 });
 

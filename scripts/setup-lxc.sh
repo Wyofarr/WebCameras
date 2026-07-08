@@ -80,11 +80,6 @@ Restart=always
 RestartSec=5
 StandardOutput=append:/var/log/webcameras/app.log
 StandardError=append:/var/log/webcameras/error.log
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ReadWritePaths=/tmp/webcameras /etc/webcameras /var/log/webcameras
-
 [Install]
 WantedBy=multi-user.target
 EOF
@@ -143,6 +138,12 @@ ln -sf /etc/nginx/sites-available/webcameras /etc/nginx/sites-enabled/webcameras
 rm -f /etc/nginx/sites-enabled/default
 
 nginx -t && systemctl enable nginx && systemctl restart nginx
+
+# ─── Install update command ──────────────────────────────────
+echo "[+] Installing 'update' command..."
+cp "$SCRIPT_DIR/update.sh" /usr/local/bin/update
+chmod +x /usr/local/bin/update
+echo "  Type 'update' at any time to upgrade WebCameras"
 
 # ─── Done ─────────────────────────────────────────────────
 echo ""

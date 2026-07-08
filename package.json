@@ -1,7 +1,7 @@
 {
   "name": "webcameras",
   "version": "2026.07.01",
-  "description": "Web-based IP camera display system — LXC container edition of displaycameras",
+  "description": "Web-based IP camera display system \u2014 LXC container edition of displaycameras",
   "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js",
@@ -9,9 +9,9 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/YOURUSER/webcameras.git"
+    "url": "https://github.com/Wyofarr/WebCameras"
   },
-  "homepage": "https://github.com/YOURUSER/webcameras",
+  "homepage": "https://github.com/Wyofarr/WebCameras",
   "dependencies": {
     "chokidar": "^3.5.3",
     "express": "^4.18.2",

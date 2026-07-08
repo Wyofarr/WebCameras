@@ -42,7 +42,7 @@ Versions follow `YEAR.MONTH.BUILD` format:
 
 ```bash
 # On your Proxmox HOST:
-git clone https://github.com/YOURUSER/webcameras
+git clone https://github.com/Wyofarr/WebCameras
 cd webcameras
 bash scripts/create-lxc.sh 200 webcameras 192.168.1.200/24 192.168.1.1
 ```
@@ -50,7 +50,7 @@ bash scripts/create-lxc.sh 200 webcameras 192.168.1.200/24 192.168.1.1
 ### Option B — Existing LXC / Ubuntu VM
 
 ```bash
-git clone https://github.com/YOURUSER/webcameras
+git clone https://github.com/Wyofarr/WebCameras
 cd webcameras
 sudo bash scripts/setup-lxc.sh
 ```
@@ -58,7 +58,7 @@ sudo bash scripts/setup-lxc.sh
 ### Option C — Docker
 
 ```bash
-git clone https://github.com/YOURUSER/webcameras
+git clone https://github.com/Wyofarr/WebCameras
 cd webcameras
 docker compose up -d
 ```

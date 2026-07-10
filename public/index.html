@@ -2,11 +2,35 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#080c10">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="WebCameras">
   <title>WebCameras</title>
+
+  <!-- PWA manifest -->
+  <link rel="manifest" href="/manifest.json">
+
+  <!-- Preload critical assets -->
+  <link rel="preload" href="/css/main.css" as="style">
+  <link rel="preload" href="/js/app.js" as="script" crossorigin>
+
   <link rel="stylesheet" href="/css/main.css">
-  <!-- HLS.js for browser RTSP/HLS playback -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.4.12/hls.min.js"></script>
+
+  <!-- HLS.js loaded async — not needed until streams start -->
+  <script>
+    window._hlsReady = false;
+    function loadHlsJs(cb) {
+      if (window.Hls) { cb(); return; }
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.4.12/hls.min.js';
+      s.onload = () => { window._hlsReady = true; cb(); };
+      document.head.appendChild(s);
+    }
+    window.loadHlsJs = loadHlsJs;
+  </script>
 </head>
 <body>
 
@@ -23,6 +47,7 @@
   <div id="topbar-right">
     <button id="btn-fullscreen" title="Fullscreen">⛶</button>
     <button id="btn-settings" title="Settings">⚙</button>
+    <a href="/config" id="btn-config" title="Config">✎</a>
     <div id="status-dot" title="Server connected"></div>
   </div>
 </header>
@@ -109,11 +134,37 @@
 
 <!-- ── Camera fullscreen overlay ─────────────────────────────────────────── -->
 <div id="cam-fullscreen" class="hidden">
-  <video id="cam-fs-video" autoplay muted playsinline></video>
+  <video id="cam-fs-video" autoplay muted playsinline preload="none"></video>
   <div id="cam-fs-label"></div>
   <button id="cam-fs-close">✕</button>
 </div>
 
+<!-- ── Mobile Bottom Nav ─────────────────────────────────────────────────── -->
+<nav id="mobile-nav">
+  <button class="mobile-nav-btn active" id="mnav-view" onclick="mobileNav('view',this)">
+    <span class="mnav-icon">⬡</span>
+    <span>View</span>
+  </button>
+  <button class="mobile-nav-btn" id="mnav-prev" onclick="mobilePrevPage()">
+    <span class="mnav-icon">◀</span>
+    <span>Prev</span>
+  </button>
+  <button class="mobile-nav-btn" id="mnav-next" onclick="mobileNextPage()">
+    <span class="mnav-icon">▶</span>
+    <span>Next</span>
+  </button>
+  <button class="mobile-nav-btn" id="mnav-settings" onclick="mobileNav('settings',this)">
+    <span class="mnav-icon">⚙</span>
+    <span>Settings</span>
+  </button>
+  <a href="/config" class="mobile-nav-btn" id="mnav-config">
+    <span class="mnav-icon">✎</span>
+    <span>Config</span>
+  </a>
+</nav>
+
+<!-- Socket.IO client -->
+<script src="/socket.io/socket.io.js"></script>
 <script type="module" src="/js/app.js"></script>
 </body>
 </html>

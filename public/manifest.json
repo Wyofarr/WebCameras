@@ -1,0 +1,26 @@
+{
+  "name": "WebCameras",
+  "short_name": "WebCams",
+  "description": "Web-based IP camera display system",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#080c10",
+  "theme_color": "#080c10",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23080c10'/><text y='72' x='50' text-anchor='middle' font-size='60' fill='%2300e5a0'>⬡</text></svg>",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["utilities"],
+  "shortcuts": [
+    {
+      "name": "Config",
+      "url": "/config",
+      "description": "Open configuration"
+    }
+  ]
+}

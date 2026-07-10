@@ -91,6 +91,13 @@ systemctl start webcameras
 # ─── Nginx reverse proxy ──────────────────────────────────
 echo "[6/6] Configuring Nginx…"
 cat > /etc/nginx/sites-available/webcameras << EOF
+gzip on;
+gzip_vary on;
+gzip_proxied any;
+gzip_comp_level 6;
+gzip_types text/plain text/css text/xml text/javascript
+           application/javascript application/json application/x-mpegURL;
+
 server {
     listen 80 default_server;
     listen [::]:80 default_server;

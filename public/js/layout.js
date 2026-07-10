@@ -66,10 +66,11 @@ export const LayoutManager = {
     el.style.padding = '1.5px';
 
     const video = document.createElement('video');
-    video.autoplay = true;
-    video.muted = true;
+    video.autoplay  = true;
+    video.muted     = true;
     video.playsInline = true;
-    video.controls = false;
+    video.controls  = false;
+    video.preload   = 'none';   // don't speculatively buffer before HLS.js attaches
     video.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;background:#000';
 
     // Loading overlay

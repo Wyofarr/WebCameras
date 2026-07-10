@@ -1,7 +1,7 @@
 #!/bin/bash
 # ╔══════════════════════════════════════════════════════════════╗
 # ║  WebCameras Update Script                                   ║
-# ║  Version: 2026.07.01                                        ║
+# ║  Version: 2026.07.02                                        ║
 # ║  Run as root inside the LXC container: update               ║
 # ╚══════════════════════════════════════════════════════════════╝
 

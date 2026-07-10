@@ -133,15 +133,19 @@ a { color: var(--accent); }
   height: 100%;
 }
 
-#topbar-right button {
+#topbar-right button,
+#topbar-right a#btn-config {
   width: 30px; height: 30px;
   border-radius: var(--radius);
   background: var(--surface2);
   color: var(--text-muted);
   font-size: 15px;
+  display: inline-flex; align-items: center; justify-content: center;
+  text-decoration: none;
   transition: background 0.15s, color 0.15s;
 }
-#topbar-right button:hover { background: var(--surface3); color: var(--text); }
+#topbar-right button:hover,
+#topbar-right a#btn-config:hover { background: var(--surface3); color: var(--text); }
 
 #status-dot {
   width: 8px; height: 8px;
@@ -587,3 +591,24 @@ label textarea { resize: vertical; min-height: 60px; font-family: var(--font-mon
 .flex-row    { display: flex; align-items: center; gap: 8px; }
 .spacer      { flex: 1; }
 hr.divider   { border: none; border-top: 1px solid var(--border); margin: 4px 0; }
+
+/* ─── Reduced motion ────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .cam-overlay.loading .cam-spinner { animation: none; border-color: var(--accent); }
+  .cam-rec-dot { animation: none; opacity: 1; }
+}
+
+/* ─── Font display swap (if self-hosting fonts in future) ───────────────── */
+@font-face {
+  font-family: 'Inter';
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-display: swap;
+}

@@ -99,6 +99,11 @@ export const StreamManager = {
   },
 
   _attachHls(id, hlsUrl, videoEl, overlayEl, retryCount = 0) {
+    // Load HLS.js on demand — deferred from page load for faster initial render
+    if (typeof Hls === 'undefined' && window.loadHlsJs) {
+      window.loadHlsJs(() => this._attachHls(id, hlsUrl, videoEl, overlayEl, retryCount));
+      return;
+    }
     if (!Hls.isSupported()) {
       // Safari native HLS
       if (videoEl.canPlayType('application/vnd.apple.mpegurl')) {

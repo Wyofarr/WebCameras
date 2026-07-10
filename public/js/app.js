@@ -47,6 +47,7 @@ async function init() {
   if (state.currentPage) LayoutManager.render(state.currentPage);
   SettingsPanel.init();
   bindTopbarEvents();
+  initSwipeGestures();
   startRotateIfNeeded();
 }
 
@@ -246,6 +247,40 @@ function bindTopbarEvents() {
       switchPage(pages[(pages.indexOf(state.currentPage) - 1 + pages.length) % pages.length]);
     }
   });
+}
+
+// ─── Swipe gestures ─────────────────────────────────────────────────────────
+function initSwipeGestures() {
+  const area = document.getElementById('view-area');
+  if (!area) return;
+
+  let startX = 0, startY = 0, startTime = 0;
+
+  area.addEventListener('touchstart', (e) => {
+    startX    = e.touches[0].clientX;
+    startY    = e.touches[0].clientY;
+    startTime = Date.now();
+  }, { passive: true });
+
+  area.addEventListener('touchend', (e) => {
+    const dx   = e.changedTouches[0].clientX - startX;
+    const dy   = e.changedTouches[0].clientY - startY;
+    const dt   = Date.now() - startTime;
+    const pages = Object.keys(state.layouts);
+
+    // Must be fast (<400ms), horizontal (|dx|>|dy|*1.5), and long enough (>60px)
+    if (dt > 400 || Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    if (pages.length < 2) return;
+
+    const idx = pages.indexOf(state.currentPage);
+    if (dx < 0) {
+      // Swipe left → next page
+      switchPage(pages[(idx + 1) % pages.length]);
+    } else {
+      // Swipe right → prev page
+      switchPage(pages[(idx - 1 + pages.length) % pages.length]);
+    }
+  }, { passive: true });
 }
 
 // ─── Mobile Navigation ───────────────────────────────────────────────────────

@@ -47,7 +47,6 @@
   <div id="topbar-right">
     <button id="btn-fullscreen" title="Fullscreen">⛶</button>
     <button id="btn-settings" title="Settings">⚙</button>
-    <a href="/config" id="btn-config" title="Config">✎</a>
     <div id="status-dot" title="Server connected"></div>
   </div>
 </header>
@@ -71,22 +70,12 @@
   </div>
 
   <nav id="settings-nav">
-    <button class="snav active" data-tab="cameras">Cameras</button>
-    <button class="snav" data-tab="layouts">Layouts</button>
+    <button class="snav active" data-tab="layouts">Layouts</button>
     <button class="snav" data-tab="global">Global</button>
   </nav>
 
-  <!-- Cameras Tab -->
-  <div class="stab active" id="tab-cameras">
-    <div class="tab-toolbar">
-      <h3>Camera Sources</h3>
-      <button class="btn-sm btn-primary" id="btn-add-camera">+ Add Camera</button>
-    </div>
-    <div id="camera-list"></div>
-  </div>
-
   <!-- Layouts Tab -->
-  <div class="stab" id="tab-layouts">
+  <div class="stab active" id="tab-layouts">
     <div class="tab-toolbar">
       <h3>Layout Pages</h3>
       <button class="btn-sm btn-primary" id="btn-add-layout">+ New Layout</button>
@@ -157,10 +146,7 @@
     <span class="mnav-icon">⚙</span>
     <span>Settings</span>
   </button>
-  <a href="/config" class="mobile-nav-btn" id="mnav-config">
-    <span class="mnav-icon">✎</span>
-    <span>Config</span>
-  </a>
+
 </nav>
 
 <!-- Socket.IO client -->

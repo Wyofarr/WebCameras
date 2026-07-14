@@ -56,6 +56,7 @@ export const StreamManager = {
             bitrate:    camera.bitrate    || '2500',
             windowW:    camera.windowW    || null,
             windowH:    camera.windowH    || null,
+            _pixelDims: camera._pixelDims || false,
           })
         });
         const data = await resp.json();

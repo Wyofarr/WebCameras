@@ -2,7 +2,7 @@
 /**
  * webcameras - Web-based IP camera display system
  * Inspired by displaycameras (github.com/Anonymousdog/displaycameras)
- * Version: 2026.07.02
+ * Version: 2026.07.03
  */
 
 const express     = require('express');
@@ -127,18 +127,36 @@ function buildAuthUrl(url, username, password) {
   }
 }
 
-function buildVideoFilter(resolution, windowW, windowH) {
+function buildVideoFilter(resolution, windowW, windowH, pixelDims) {
   const h = parseInt(resolution) || 1080;
+
   if (windowW && windowH && windowW > 0 && windowH > 0) {
-    const aspect  = windowW / windowH;
+    let aspect;
+
+    if (pixelDims) {
+      // windowW/windowH are actual pixel dimensions of the DOM cell —
+      // use them directly for the true aspect ratio
+      aspect = windowW / windowH;
+    } else {
+      // Legacy: raw ratio fractions — approximate using 16:9 viewport
+      // w:0.230, h:0.330 on 1920x1080 → 441×356 → aspect 1.239
+      const viewW = 1920, viewH = 1080; // safe default assumption
+      const pxW = windowW * viewW;
+      const pxH = windowH * viewH;
+      aspect = pxW / pxH;
+    }
+
     const targetH = h;
     const targetW = Math.round(targetH * aspect / 2) * 2;
+
     return [
       '-vf',
       `scale=${targetW}:${targetH}:force_original_aspect_ratio=decrease,` +
       `pad=${targetW}:${targetH}:(ow-iw)/2:(oh-ih)/2:black,setsar=1`
     ];
   }
+
+  // No window info — scale height only, keep source aspect
   return ['-vf', `scale=-2:${h}`];
 }
 
@@ -148,6 +166,7 @@ function buildFfmpegArgs(camera, url, dir) {
   const bitrate    = parseInt(camera.bitrate) || 2500;
   const windowW    = camera.windowW;
   const windowH    = camera.windowH;
+  const pixelDims  = !!camera._pixelDims;
   const playlist   = path.join(dir, 'stream.m3u8');
 
   const videoArgs = resolution === 'source'
@@ -156,7 +175,7 @@ function buildFfmpegArgs(camera, url, dir) {
         '-c:v', 'libx264',
         '-preset', 'ultrafast',
         '-tune', 'zerolatency',
-        ...buildVideoFilter(resolution, windowW, windowH),
+        ...buildVideoFilter(resolution, windowW, windowH, pixelDims),
         '-b:v', `${bitrate}k`,
         '-maxrate', `${bitrate}k`,
         '-bufsize', `${bitrate * 2}k`,
@@ -325,10 +344,10 @@ app.delete('/api/layouts/:name', (req, res) => {
 });
 
 app.post('/api/streams/:cameraId/start', (req, res) => {
-  const { url, transport, username, password, resolution, bitrate, windowW, windowH } = req.body;
+  const { url, transport, username, password, resolution, bitrate, windowW, windowH, _pixelDims } = req.body;
   if (!url) return res.status(400).json({ error:'url required' });
   startStream({ id:req.params.cameraId, url, transport, username, password,
-    resolution, bitrate, windowW, windowH });
+    resolution, bitrate, windowW, windowH, _pixelDims });
   res.json({ ok:true, hlsUrl:`/hls/${req.params.cameraId}/stream.m3u8` });
 });
 

@@ -23,7 +23,6 @@ export const SettingsPanel = {
     });
 
     document.getElementById('btn-close-settings').addEventListener('click', () => this.close());
-    document.getElementById('btn-add-camera').addEventListener('click', () => this.openCameraModal());
     document.getElementById('btn-add-layout').addEventListener('click', () => this.promptNewLayout());
 
     // Global config form
@@ -71,7 +70,7 @@ export const SettingsPanel = {
   },
 
   refresh() {
-    this._renderCameraList();
+    if (document.getElementById('camera-list')) this._renderCameraList();
     this._renderLayoutList();
     this._populateGlobalForm();
   },

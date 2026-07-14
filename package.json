@@ -1,6 +1,6 @@
 {
   "name": "webcameras",
-  "version": "2026.07.02",
+  "version": "2026.07.03",
   "description": "Web-based IP camera display system \u2014 LXC container edition of displaycameras",
   "main": "server/index.js",
   "scripts": {

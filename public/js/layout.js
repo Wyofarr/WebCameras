@@ -38,14 +38,22 @@ export const LayoutManager = {
       grid.appendChild(cell.el);
       this._cells.set(win.cameraId || win.id, cell);
 
-      // Find camera config and start stream — pass window dims for black bar padding
+      // Find camera config and start stream
+      // Measure actual pixel dimensions AFTER appending to DOM so the server
+      // can compute the correct target aspect ratio for black bar padding.
       const cam = this._findCamera(win.cameraId || win.id, layout);
       if (cam) {
-        StreamManager.attach(
-          { ...cam, windowW: win.w, windowH: win.h },
-          cell.video,
-          cell.overlay
-        );
+        // Use requestAnimationFrame to ensure the element has been laid out
+        requestAnimationFrame(() => {
+          const rect = cell.el.getBoundingClientRect();
+          const pixW = rect.width  || (grid.offsetWidth  * win.w);
+          const pixH = rect.height || (grid.offsetHeight * win.h);
+          StreamManager.attach(
+            { ...cam, windowW: pixW, windowH: pixH, _pixelDims: true },
+            cell.video,
+            cell.overlay
+          );
+        });
       }
     }
   },

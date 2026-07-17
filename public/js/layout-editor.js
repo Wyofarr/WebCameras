@@ -80,7 +80,7 @@ export const LayoutEditor = {
   _bindEvents() {
     document.getElementById('le-add-win').addEventListener('click', () => {
       const id = 'w' + (Date.now() % 100000);
-      this._windows.push({ id, x: 0, y: 0, w: 0.5, h: 0.5, cameraId: '', label: 'New Window' });
+      this._windows.push({ id, x: 0, y: 0, w: 0.5, h: 0.5, cameraId: '', label: 'New Window', showLabel: true });
       this._renderWindowList();
       this._renderPreview();
     });
@@ -133,10 +133,18 @@ export const LayoutEditor = {
             border:1px solid var(--border);background:var(--surface3);
             color:var(--text-muted);cursor:pointer">Remove</button>
         </div>
-        <label style="font-size:11px;color:var(--text-muted)">Label
-          <input type="text" class="win-field" data-idx="${idx}" data-field="label"
-            value="${win.label || ''}" placeholder="Window label">
-        </label>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <label style="font-size:11px;color:var(--text-muted);flex:1;margin:0">Label
+            <input type="text" class="win-field" data-idx="${idx}" data-field="label"
+              value="${win.label || ''}" placeholder="Window label">
+          </label>
+          <label style="font-size:11px;color:var(--text-muted);white-space:nowrap;display:flex;align-items:center;gap:4px;margin:0;padding-top:14px">
+            <input type="checkbox" class="win-show-label" data-idx="${idx}"
+              ${win.showLabel !== false ? 'checked' : ''}
+              style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer">
+            Show
+          </label>
+        </div>
         <label style="font-size:11px;color:var(--text-muted)">Camera
           <select class="win-cam-select" data-idx="${idx}">
             <option value="">— Unassigned —</option>
@@ -192,6 +200,15 @@ export const LayoutEditor = {
         });
       });
 
+      // showLabel toggle
+      const showLabelCb = row.querySelector('.win-show-label');
+      if (showLabelCb) {
+        showLabelCb.addEventListener('change', (e) => {
+          this._windows[idx].showLabel = e.target.checked;
+          this._renderPreview();
+        });
+      }
+
       // Delete
       row.querySelector('.win-del').addEventListener('click', () => {
         this._windows.splice(idx, 1);
@@ -226,9 +243,12 @@ export const LayoutEditor = {
       el.style.width  = (win.w * 100) + '%';
       el.style.height = (win.h * 100) + '%';
       el.title = win.label || `Window ${idx + 1}`;
+      const labelText = win.label || win.cameraId || `Win ${idx+1}`;
+      const showL = win.showLabel !== false;
       el.innerHTML = `<span style="font-size:9px;text-align:center;padding:2px;
-        overflow:hidden;max-width:100%;white-space:nowrap;text-overflow:ellipsis">
-        ${win.label || win.cameraId || `Win ${idx+1}`}
+        overflow:hidden;max-width:100%;white-space:nowrap;text-overflow:ellipsis;
+        opacity:${showL ? '1' : '0.3'};text-decoration:${showL ? 'none' : 'line-through'}">
+        ${labelText}${showL ? '' : ' 🚫'}
       </span>`;
 
       // Drag to reposition

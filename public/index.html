@@ -9,17 +9,10 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="WebCameras">
   <title>WebCameras</title>
-
-  <!-- PWA manifest -->
   <link rel="manifest" href="/manifest.json">
-
-  <!-- Preload critical assets -->
   <link rel="preload" href="/css/main.css" as="style">
   <link rel="preload" href="/js/app.js" as="script" crossorigin>
-
   <link rel="stylesheet" href="/css/main.css">
-
-  <!-- HLS.js loaded async — not needed until streams start -->
   <script>
     window._hlsReady = false;
     function loadHlsJs(cb) {
@@ -36,17 +29,20 @@
 
 <!-- ── Top Nav ──────────────────────────────────────────────────────────── -->
 <header id="topbar">
-  <div id="topbar-left">
+  <!-- Clickable brand → shows info popup -->
+  <button id="topbar-brand" title="Version &amp; camera status">
     <span id="app-icon">⬡</span>
     <span id="app-name">WebCameras</span>
-  </div>
+  </button>
+
   <div id="page-tabs-wrap">
     <div id="page-tabs"></div>
-    <button id="btn-add-page" title="New layout page">+</button>
+    <!-- + opens new layout dialog directly -->
+    <button id="btn-add-page" title="Add new layout page">+</button>
   </div>
+
   <div id="topbar-right">
-    <button id="btn-fullscreen" title="Fullscreen">⛶</button>
-    <button id="btn-settings" title="Settings">⚙</button>
+    <button id="btn-fullscreen" title="Toggle fullscreen">⛶</button>
     <div id="status-dot" title="Server connected"></div>
   </div>
 </header>
@@ -56,16 +52,54 @@
   <div id="camera-grid"></div>
   <div id="empty-state">
     <div id="empty-icon">📷</div>
-    <h2>No cameras configured</h2>
-    <p>Open <strong>Settings</strong> to add cameras and define layouts.</p>
-    <button class="btn-primary" id="btn-empty-settings">Open Settings</button>
+    <h2>No layouts yet</h2>
+    <p>Tap <strong>+</strong> in the top bar to create your first layout.</p>
+    <button class="btn-primary" id="btn-empty-add">+ New Layout</button>
   </div>
 </main>
 
-<!-- ── Settings Panel ───────────────────────────────────────────────────── -->
+<!-- ── Info Popup (brand click) ──────────────────────────────────────────── -->
+<div id="info-popup" class="hidden">
+  <div id="info-popup-box">
+    <div id="info-popup-header">
+      <img src="/warehouse-logo.png" alt="WARE-House" id="info-logo">
+      <button id="info-popup-close">✕</button>
+    </div>
+    <div id="info-popup-body">
+      <div id="info-version-row">
+        <span class="info-label">Version</span>
+        <span id="info-version" class="info-value monospace">—</span>
+      </div>
+      <div id="info-update-row" style="display:none">
+        <span class="info-label">Update available</span>
+        <span id="info-latest" class="info-value monospace" style="color:var(--yellow)">—</span>
+      </div>
+      <div class="info-divider"></div>
+      <div id="info-cam-list">
+        <div class="info-label" style="margin-bottom:6px">Camera Status</div>
+        <div id="info-cams"></div>
+      </div>
+      <div class="info-divider"></div>
+      <a href="/config" class="info-config-link">⚙ Open full configuration</a>
+    </div>
+  </div>
+</div>
+
+<!-- ── New Layout Modal (inline, no settings panel needed) ────────────────── -->
+<div id="modal-overlay" class="hidden">
+  <div id="modal-box">
+    <div id="modal-header">
+      <h3 id="modal-title">Dialog</h3>
+      <button id="modal-close">✕</button>
+    </div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<!-- ── Layout Settings Panel (layouts + global only) ─────────────────────── -->
 <aside id="settings-panel" class="hidden">
   <div id="settings-header">
-    <h2>Settings</h2>
+    <h2>Layouts</h2>
     <button id="btn-close-settings">✕</button>
   </div>
 
@@ -74,7 +108,6 @@
     <button class="snav" data-tab="global">Global</button>
   </nav>
 
-  <!-- Layouts Tab -->
   <div class="stab active" id="tab-layouts">
     <div class="tab-toolbar">
       <h3>Layout Pages</h3>
@@ -83,7 +116,6 @@
     <div id="layout-list"></div>
   </div>
 
-  <!-- Global Tab -->
   <div class="stab" id="tab-global">
     <h3>Global Options</h3>
     <form id="form-global">
@@ -105,21 +137,10 @@
       <label>Retry Attempts
         <input type="number" name="retry" min="1" max="20" value="3">
       </label>
-      <button type="submit" class="btn-primary">Save Global Config</button>
+      <button type="submit" class="btn-primary">Save</button>
     </form>
   </div>
 </aside>
-
-<!-- ── Modal Dialogs ─────────────────────────────────────────────────────── -->
-<div id="modal-overlay" class="hidden">
-  <div id="modal-box">
-    <div id="modal-header">
-      <h3 id="modal-title">Dialog</h3>
-      <button id="modal-close">✕</button>
-    </div>
-    <div id="modal-body"></div>
-  </div>
-</div>
 
 <!-- ── Camera fullscreen overlay ─────────────────────────────────────────── -->
 <div id="cam-fullscreen" class="hidden">
@@ -138,18 +159,20 @@
     <span class="mnav-icon">◀</span>
     <span>Prev</span>
   </button>
+  <button class="mobile-nav-btn" id="mnav-add" onclick="window.triggerNewLayout()">
+    <span class="mnav-icon">+</span>
+    <span>New</span>
+  </button>
   <button class="mobile-nav-btn" id="mnav-next" onclick="mobileNextPage()">
     <span class="mnav-icon">▶</span>
     <span>Next</span>
   </button>
-  <button class="mobile-nav-btn" id="mnav-settings" onclick="mobileNav('settings',this)">
-    <span class="mnav-icon">⚙</span>
-    <span>Settings</span>
+  <button class="mobile-nav-btn" id="mnav-info" onclick="window.showInfoPopup()">
+    <span class="mnav-icon">ℹ</span>
+    <span>Info</span>
   </button>
-
 </nav>
 
-<!-- Socket.IO client -->
 <script src="/socket.io/socket.io.js"></script>
 <script type="module" src="/js/app.js"></script>
 </body>

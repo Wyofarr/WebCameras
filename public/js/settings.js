@@ -22,8 +22,8 @@ export const SettingsPanel = {
       });
     });
 
-    document.getElementById('btn-close-settings').addEventListener('click', () => this.close());
-    document.getElementById('btn-add-layout').addEventListener('click', () => this.promptNewLayout());
+    document.getElementById('btn-close-settings')?.addEventListener('click', () => this.close());
+    document.getElementById('btn-add-layout')?.addEventListener('click', () => this.promptNewLayout());
 
     // Global config form
     document.getElementById('form-global').addEventListener('submit', async (e) => {

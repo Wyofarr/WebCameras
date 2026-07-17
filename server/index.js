@@ -2,7 +2,7 @@
 /**
  * webcameras - Web-based IP camera display system
  * Inspired by displaycameras (github.com/Anonymousdog/displaycameras)
- * Version: 2026.07.03
+ * Version: 2026.07.04
  */
 
 const express     = require('express');

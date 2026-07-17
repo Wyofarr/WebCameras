@@ -88,12 +88,13 @@ export const LayoutManager = {
       <div class="cam-spinner"></div>
       <div class="cam-status-text">Connecting…</div>`;
 
-    // Label bar
+    // Label bar — hidden if showLabel is false
     const label = document.createElement('div');
     label.className = 'cam-label';
     label.innerHTML = `
       <span class="cam-name">${win.label || win.cameraId || 'Camera'}</span>
       <span class="cam-time"></span>`;
+    if (win.showLabel === false) label.style.display = 'none';
 
     // Live recording dot
     const recDot = document.createElement('div');

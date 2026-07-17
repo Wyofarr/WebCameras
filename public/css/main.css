@@ -612,3 +612,134 @@ hr.divider   { border: none; border-top: 1px solid var(--border); margin: 4px 0;
   font-family: 'JetBrains Mono';
   font-display: swap;
 }
+
+/* ─── Topbar brand button ────────────────────────────────────────────── */
+#topbar-brand {
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 14px;
+  height: 100%;
+  border-right: 1px solid var(--border);
+  background: none;
+  border-top: none; border-bottom: none; border-left: none;
+  cursor: pointer;
+  transition: background 0.15s;
+  min-width: 140px;
+  flex-shrink: 0;
+}
+#topbar-brand:hover { background: var(--surface2); }
+
+/* ─── Info Popup ────────────────────────────────────────────────────── */
+#info-popup {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(4px);
+  z-index: 500;
+  display: flex; align-items: flex-start; justify-content: flex-start;
+  padding: calc(var(--topbar-h) + 8px) 0 0 8px;
+}
+
+#info-popup-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  width: 300px;
+  max-height: calc(100vh - var(--topbar-h) - 80px);
+  overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  animation: popup-in 0.18s ease;
+}
+
+@keyframes popup-in {
+  from { transform: translateY(-8px) scale(0.97); opacity: 0; }
+  to   { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+#info-popup-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+#info-logo {
+  height: 36px; width: auto;
+  object-fit: contain;
+}
+
+#info-popup-close {
+  width: 26px; height: 26px;
+  border-radius: var(--radius);
+  background: var(--surface3);
+  color: var(--text-muted);
+  font-size: 13px;
+  transition: background 0.15s, color 0.15s;
+}
+#info-popup-close:hover { background: var(--red); color: #fff; }
+
+#info-popup-body {
+  padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+
+.info-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--text-dim);
+}
+
+.info-value {
+  font-size: 14px;
+  color: var(--text);
+}
+
+#info-version-row, #info-update-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 3px 0;
+}
+
+.info-divider {
+  border-top: 1px solid var(--border);
+  margin: 4px 0;
+}
+
+/* Camera status rows in info popup */
+.info-cam-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 0;
+  font-size: 12px;
+}
+.info-cam-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  flex-shrink: 0;
+}
+.info-cam-dot.live { background: var(--accent); box-shadow: 0 0 5px var(--accent); }
+.info-cam-dot.error { background: var(--red); }
+.info-cam-name { flex: 1; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.info-cam-status { font-size: 10px; color: var(--text-dim); font-family: var(--font-mono); }
+
+.info-config-link {
+  display: block;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+  text-decoration: none;
+  transition: all 0.15s;
+  margin-top: 4px;
+}
+.info-config-link:hover { border-color: var(--accent-dim); color: var(--accent); }
+
+/* Mobile info popup — full width */
+@media (max-width: 600px) {
+  #info-popup {
+    padding: calc(var(--topbar-h) + 6px) 8px 0;
+    justify-content: center;
+  }
+  #info-popup-box { width: 100%; max-width: 340px; }
+}

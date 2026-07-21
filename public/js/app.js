@@ -225,15 +225,33 @@ export async function showInfoPopup() {
     } else {
       for (const cam of allCams) {
         const live = !!streams[cam.id];
+        const crashes = streams[cam.id]?.crashes || 0;
         const row = document.createElement('div');
         row.className = 'info-cam-row';
         row.innerHTML = `
           <div class="info-cam-dot ${live ? 'live' : ''}"></div>
           <span class="info-cam-name">${cam.label || cam.id}</span>
-          <span class="info-cam-status">${live ? 'LIVE' : 'idle'}</span>`;
+          <span class="info-cam-status">
+            ${live ? 'LIVE' : 'idle'}
+            ${crashes > 0 ? `<span style="color:var(--yellow)"> ⚠${crashes}</span>` : ''}
+          </span>`;
         camsEl.appendChild(row);
       }
     }
+
+    // Disk space
+    try {
+      const sysR = await fetch('/api/system');
+      const sys  = await sysR.json();
+      if (sys.disk) {
+        const diskEl = document.getElementById('info-disk');
+        if (diskEl) {
+          const pct = parseInt(sys.disk.pct);
+          diskEl.textContent = `${sys.disk.used} / ${sys.disk.size} (${sys.disk.pct})`;
+          diskEl.style.color = pct > 80 ? 'var(--red)' : pct > 60 ? 'var(--yellow)' : 'var(--text-muted)';
+        }
+      }
+    } catch {}
   } catch {
     camsEl.innerHTML = '<div style="font-size:12px;color:var(--text-dim)">Status unavailable</div>';
   }

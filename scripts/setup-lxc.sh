@@ -22,6 +22,7 @@ apt-get install -y --no-install-recommends \
   ffmpeg \
   nginx \
   git \
+  lsof \
   2>/dev/null
 
 # ─── Node.js 20 LTS ───────────────────────────────────────
@@ -42,7 +43,7 @@ fi
 
 # ─── Install application ──────────────────────────────────
 echo "[4/6] Installing WebCameras…"
-mkdir -p "$INSTALL_DIR" /etc/webcameras /var/log/webcameras /tmp/webcameras/hls
+mkdir -p "$INSTALL_DIR" /etc/webcameras /var/log/webcameras /var/lib/webcameras/hls
 
 # Copy files (assumes script is run from repo root)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -57,7 +58,7 @@ fi
 
 # Set ownership
 chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR" /etc/webcameras \
-  /var/log/webcameras /tmp/webcameras
+  /var/log/webcameras /var/lib/webcameras
 
 # ─── Systemd service ──────────────────────────────────────
 echo "[5/6] Installing systemd service…"
@@ -75,6 +76,7 @@ WorkingDirectory=${INSTALL_DIR}
 Environment=NODE_ENV=production
 Environment=PORT=${PORT}
 Environment=CONFIG_PATH=/etc/webcameras
+Environment=HLS_DIR=/var/lib/webcameras/hls
 ExecStart=/usr/bin/node ${INSTALL_DIR}/server/index.js
 Restart=always
 RestartSec=5

@@ -1,9 +1,9 @@
 #!/bin/bash
-# ╔══════════════════════════════════════════════════════════╗
-# ║  WebCameras — LXC Container Setup Script                ║
-# ║  Ubuntu 22.04 LTS base image                           ║
-# ║  Run as root inside the container                       ║
-# ╚══════════════════════════════════════════════════════════╝
+# ------------------------------------------------------------
+# -  WebCameras - LXC Container Setup Script                -
+# -  Ubuntu 22.04 LTS base image                           -
+# -  Run as root inside the container                       -
+# ------------------------------------------------------------
 set -e
 
 INSTALL_DIR="/opt/webcameras"
@@ -13,11 +13,11 @@ CONFIG_DIR="/etc/webcameras"
 HLS_DIR="/var/lib/webcameras/hls"
 LOG_DIR="/var/log/webcameras"
 
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "---------------------------------------------"
 echo "  WebCameras LXC Setup"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "---------------------------------------------"
 
-# ─── System packages ──────────────────────────────────────
+# --- System packages --------------------------------------
 echo "[1/6] Installing system packages..."
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
@@ -26,7 +26,7 @@ apt-get install -y --no-install-recommends \
   ffmpeg nginx git lsof \
   2>/dev/null
 
-# ─── Node.js 20 LTS ───────────────────────────────────────
+# --- Node.js 20 LTS ---------------------------------------
 echo "[2/6] Installing Node.js 20 LTS..."
 if ! command -v node &>/dev/null; then
   curl -fsSL https://deb.nodesource.com/setup_20.x | bash - 2>/dev/null
@@ -34,13 +34,13 @@ if ! command -v node &>/dev/null; then
 fi
 echo "  Node: $(node --version)  NPM: $(npm --version)"
 
-# ─── Service user ─────────────────────────────────────────
+# --- Service user -----------------------------------------
 echo "[3/6] Creating service user..."
 if ! id "$SERVICE_USER" &>/dev/null; then
   useradd -r -s /bin/false -d "$INSTALL_DIR" "$SERVICE_USER"
 fi
 
-# ─── Install application ──────────────────────────────────
+# --- Install application ----------------------------------
 echo "[4/6] Installing WebCameras..."
 mkdir -p "$INSTALL_DIR" "$CONFIG_DIR" "$LOG_DIR" "$HLS_DIR"
 
@@ -67,13 +67,13 @@ done
 chown -R "$SERVICE_USER:$SERVICE_USER" \
   "$INSTALL_DIR" "$CONFIG_DIR" "$LOG_DIR" "$HLS_DIR"
 
-# ─── Systemd service ──────────────────────────────────────
+# --- Systemd service --------------------------------------
 echo "[5/6] Writing systemd service..."
 
-# Always write a clean service file — no sandbox options (incompatible with LXC)
+# Always write a clean service file - no sandbox options (incompatible with LXC)
 cat > /etc/systemd/system/webcameras.service << SVCEOF
 [Unit]
-Description=WebCameras — Web IP Camera Display
+Description=WebCameras ? Web IP Camera Display
 After=network.target
 
 [Service]
@@ -99,7 +99,7 @@ systemctl daemon-reload
 systemctl enable webcameras
 systemctl restart webcameras
 
-# ─── Nginx reverse proxy ──────────────────────────────────
+# --- Nginx reverse proxy ----------------------------------
 echo "[6/6] Configuring Nginx..."
 cat > /etc/nginx/sites-available/webcameras << NGXEOF
 gzip on;
@@ -151,20 +151,20 @@ ln -sf /etc/nginx/sites-available/webcameras /etc/nginx/sites-enabled/webcameras
 rm -f /etc/nginx/sites-enabled/default
 nginx -t && systemctl enable nginx && systemctl restart nginx
 
-# ─── Install update command ────────────────────────────────
+# --- Install update command --------------------------------
 echo "[+] Installing 'update' command..."
 cp "$SCRIPT_DIR/update.sh" /usr/local/bin/update
 chmod +x /usr/local/bin/update
 
-# ─── Done ─────────────────────────────────────────────────
+# --- Done -------------------------------------------------
 IP=$(hostname -I | awk '{print $1}')
 echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "  ✓ WebCameras installed successfully!"
+echo "---------------------------------------------"
+echo "  OK WebCameras installed successfully!"
 echo ""
 echo "  Web UI:  http://${IP}"
 echo "  Config:  http://${IP}/config"
 echo "  Update:  type 'update' to upgrade"
 echo "  Logs:    tail -f ${LOG_DIR}/app.log"
 echo "  Status:  systemctl status webcameras"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "---------------------------------------------"

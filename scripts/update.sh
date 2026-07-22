@@ -1,9 +1,9 @@
 #!/bin/bash
-# ╔══════════════════════════════════════════════════════════════╗
-# ║  WebCameras Update Script                                   ║
-# ║  Version: 2026.07.06                                        ║
-# ║  Run as root inside the LXC container: update               ║
-# ╚══════════════════════════════════════════════════════════════╝
+# ----------------------------------------------------------------
+# -  WebCameras Update Script                                   -
+# -  Version: 2026.07.06                                        -
+# -  Run as root inside the LXC container: update               -
+# ----------------------------------------------------------------
 
 INSTALL_DIR="/opt/webcameras"
 CONFIG_DIR="/etc/webcameras"
@@ -19,18 +19,18 @@ RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 
 echo -e "${CYAN}"
-echo "  ╔══════════════════════════════════════╗"
-echo "  ║       WebCameras Updater             ║"
-echo "  ╚══════════════════════════════════════╝"
+echo "  +======================================+"
+echo "  |       WebCameras Updater             |"
+echo "  +======================================+"
 echo -e "${NC}"
 
-# ─── Root check ───────────────────────────────────────────
+# --------------------------------------------------
 if [ "$EUID" -ne 0 ]; then
   echo -e "${RED}Error: Please run as root${NC}"
   exit 1
 fi
 
-# ─── Ensure required tools ────────────────────────────────
+# --------------------------------------------------
 for tool in git curl node npm lsof; do
   if ! command -v "$tool" &>/dev/null; then
     echo -e "  ${YELLOW}Installing missing tool: $tool${NC}"
@@ -38,8 +38,8 @@ for tool in git curl node npm lsof; do
   fi
 done
 
-# ─── Internet check ───────────────────────────────────────
-echo -n "  Checking internet connection… "
+# --------------------------------------------------
+echo -n "  Checking internet connection? "
 if ! curl -s --max-time 5 https://github.com > /dev/null 2>&1; then
   echo -e "${RED}FAILED${NC}"
   echo -e "${RED}Cannot reach GitHub. Check network/IP forwarding.${NC}"
@@ -47,7 +47,7 @@ if ! curl -s --max-time 5 https://github.com > /dev/null 2>&1; then
 fi
 echo -e "${GREEN}OK${NC}"
 
-# ─── Local version ────────────────────────────────────────
+# --------------------------------------------------
 LOCAL_VERSION="unknown"
 if [ -f "$INSTALL_DIR/package.json" ]; then
   LOCAL_VERSION=$(node -e \
@@ -55,8 +55,8 @@ if [ -f "$INSTALL_DIR/package.json" ]; then
     || echo "unknown")
 fi
 
-# ─── Latest version from GitHub ───────────────────────────
-echo -n "  Fetching latest version from GitHub… "
+# --------------------------------------------------
+echo -n "  Fetching latest version from GitHub? "
 REPO_PATH=$(echo "$REPO_URL" | sed 's|https://github.com/||;s|\.git$||;s|/$||')
 
 LATEST_VERSION=$(curl -s --max-time 10 \
@@ -81,15 +81,15 @@ echo -e "  ${BOLD}Latest version:   ${NC} ${LATEST_VERSION}"
 echo -e "  ${BOLD}Repository:       ${NC} ${REPO_URL}"
 echo ""
 
-# ─── Confirm ──────────────────────────────────────────────
+# --------------------------------------------------
 if [ "$LOCAL_VERSION" = "$LATEST_VERSION" ] && [ "$LATEST_VERSION" != "unknown" ]; then
-  echo -e "  ${GREEN}✓ Already running the latest version (${LOCAL_VERSION})${NC}"
+  echo -e "  ${GREEN}OK Already running the latest version (${LOCAL_VERSION})${NC}"
   echo ""
   read -r -p "  Reinstall anyway? [y/N] " force
   [[ "$force" =~ ^[Yy]$ ]] || { echo "  Cancelled."; exit 0; }
 else
   if [ "$LATEST_VERSION" = "unknown" ]; then
-    echo -e "  ${YELLOW}⚠ Could not verify latest version from GitHub.${NC}"
+    echo -e "  ${YELLOW}! Could not verify latest version from GitHub.${NC}"
     read -r -p "  Continue anyway? [y/N] " confirm
   else
     echo -e "  ${YELLOW}You are currently running version ${LOCAL_VERSION} of WebCameras"
@@ -101,25 +101,25 @@ else
 fi
 
 echo ""
-echo -e "  ${CYAN}Starting update…${NC}"
+echo -e "  ${CYAN}Starting update?${NC}"
 mkdir -p "$LOG_DIR"
-echo "[$(date)] Update started: ${LOCAL_VERSION} → ${LATEST_VERSION}" >> "$LOG"
+echo "[$(date)] Update started: ${LOCAL_VERSION} -> ${LATEST_VERSION}" >> "$LOG"
 
-# ─── Backup config ────────────────────────────────────────
-echo -n "  Backing up config… "
+# --------------------------------------------------
+echo -n "  Backing up config? "
 BACKUP_DIR="/etc/webcameras-backup-$(date +%Y%m%d-%H%M%S)"
 cp -r "$CONFIG_DIR" "$BACKUP_DIR" 2>/dev/null \
   && echo -e "${GREEN}OK${NC} (${BACKUP_DIR})" \
   || echo -e "${YELLOW}SKIPPED${NC}"
 
-# ─── Clone repo (no auth first) ───────────────────────────
-echo -n "  Downloading latest version… "
+# --------------------------------------------------
+echo -n "  Downloading latest version? "
 rm -rf "$TMP_DIR"
 
 GIT_TERMINAL_PROMPT=0 git clone --depth=1 "$REPO_URL" "$TMP_DIR" >> "$LOG" 2>&1
 
 if [ $? -ne 0 ]; then
-  echo -e "${YELLOW}public clone failed — trying with credentials${NC}"
+  echo -e "${YELLOW}public clone failed ? trying with credentials${NC}"
   read -r -p "  GitHub username: " GH_USER
   read -r -s -p "  GitHub token: " GH_TOKEN
   echo ""
@@ -128,21 +128,21 @@ if [ $? -ne 0 ]; then
     "https://${GH_USER}:${GH_TOKEN}@github.com/${REPO_PATH}.git" \
     "$TMP_DIR" >> "$LOG" 2>&1
   if [ $? -ne 0 ]; then
-    echo -e "  ${RED}FAILED — check credentials and repo URL${NC}"
+    echo -e "  ${RED}FAILED ? check credentials and repo URL${NC}"
     exit 1
   fi
 fi
 echo -e "${GREEN}OK${NC}"
 
-# ─── Stop service + kill any stale ffmpeg ─────────────────
-echo -n "  Stopping WebCameras… "
+# --------------------------------------------------
+echo -n "  Stopping WebCameras? "
 systemctl stop webcameras 2>/dev/null || true
 sleep 2
 pkill -9 ffmpeg 2>/dev/null || true
 echo -e "${GREEN}OK${NC}"
 
-# ─── Install new files ────────────────────────────────────
-echo -n "  Installing new files… "
+# --------------------------------------------------
+echo -n "  Installing new files? "
 cp -r "$TMP_DIR/server"       "$INSTALL_DIR/" >> "$LOG" 2>&1
 cp -r "$TMP_DIR/public"       "$INSTALL_DIR/" >> "$LOG" 2>&1
 cp -r "$TMP_DIR/scripts"      "$INSTALL_DIR/" >> "$LOG" 2>&1
@@ -156,30 +156,30 @@ for f in "$TMP_DIR/config/"*; do
 done
 echo -e "${GREEN}OK${NC}"
 
-# ─── Update dependencies ──────────────────────────────────
-echo -n "  Updating dependencies… "
+# --------------------------------------------------
+echo -n "  Updating dependencies? "
 cd "$INSTALL_DIR" && npm install --production --silent >> "$LOG" 2>&1 \
   && echo -e "${GREEN}OK${NC}" \
-  || echo -e "${YELLOW}WARN — check $LOG${NC}"
+  || echo -e "${YELLOW}WARN ? check $LOG${NC}"
 
-# ─── Restore user config ──────────────────────────────────
-echo -n "  Restoring your config… "
+# --------------------------------------------------
+echo -n "  Restoring your config? "
 cp -rn "$BACKUP_DIR/." "$CONFIG_DIR/" 2>/dev/null || true
 echo -e "${GREEN}OK${NC}"
 
-# ─── Ensure HLS directory exists on main disk ─────────────
-echo -n "  Ensuring HLS directory… "
+# --------------------------------------------------
+echo -n "  Ensuring HLS directory? "
 mkdir -p "$HLS_DIR"
 chown -R "$SERVICE_USER:$SERVICE_USER" \
   "$INSTALL_DIR" "$CONFIG_DIR" "$LOG_DIR" "$HLS_DIR" 2>/dev/null || true
 echo -e "${GREEN}OK${NC}"
 
-# ─── Write a clean service file every time ────────────────
+# --------------------------------------------------
 # This fixes: 226/NAMESPACE, missing HLS_DIR, wrong paths
-echo -n "  Writing service file… "
+echo -n "  Writing service file? "
 cat > /etc/systemd/system/webcameras.service << SVCEOF
 [Unit]
-Description=WebCameras — Web IP Camera Display
+Description=WebCameras ? Web IP Camera Display
 After=network.target
 
 [Service]
@@ -202,17 +202,17 @@ WantedBy=multi-user.target
 SVCEOF
 echo -e "${GREEN}OK${NC}"
 
-# ─── Update this script itself ────────────────────────────
+# --------------------------------------------------
 if [ -f "$TMP_DIR/scripts/update.sh" ]; then
   cp "$TMP_DIR/scripts/update.sh" /usr/local/bin/update
   chmod +x /usr/local/bin/update
 fi
 
-# ─── Cleanup ──────────────────────────────────────────────
+# --------------------------------------------------
 rm -rf "$TMP_DIR"
 
-# ─── Reload and restart ───────────────────────────────────
-echo -n "  Restarting WebCameras… "
+# --------------------------------------------------
+echo -n "  Restarting WebCameras? "
 systemctl daemon-reload
 systemctl enable webcameras 2>/dev/null || true
 systemctl start webcameras
@@ -235,7 +235,7 @@ else
   exit 1
 fi
 
-# ─── Done ─────────────────────────────────────────────────
+# --------------------------------------------------
 NEW_VERSION=$(node -e \
   "console.log(require('$INSTALL_DIR/package.json').version)" 2>/dev/null \
   || echo "$LATEST_VERSION")
@@ -244,9 +244,9 @@ echo "[$(date)] Update complete: ${NEW_VERSION}" >> "$LOG"
 
 IP=$(hostname -I | awk '{print $1}')
 echo ""
-echo -e "  ${GREEN}╔══════════════════════════════════════════════╗${NC}"
-echo -e "  ${GREEN}║  Update complete!  Now running ${NEW_VERSION}    ║${NC}"
-echo -e "  ${GREEN}╚══════════════════════════════════════════════╝${NC}"
+echo -e "  ${GREEN}+==============================================+${NC}"
+echo -e "  ${GREEN}|  Update complete!  Now running ${NEW_VERSION}    |${NC}"
+echo -e "  ${GREEN}+==============================================+${NC}"
 echo ""
 echo -e "  Web UI:   ${CYAN}http://${IP}${NC}"
 echo -e "  Config:   ${CYAN}http://${IP}/config${NC}"

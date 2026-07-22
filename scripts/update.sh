@@ -139,6 +139,8 @@ echo -n "  Stopping WebCameras? "
 systemctl stop webcameras 2>/dev/null || true
 sleep 2
 pkill -9 ffmpeg 2>/dev/null || true
+pkill -f 'node.*server/index.js' 2>/dev/null || true
+sleep 1
 echo -e "${GREEN}OK${NC}"
 
 # --------------------------------------------------

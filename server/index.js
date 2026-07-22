@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * webcameras - Web-based IP camera display system
- * Version: 2026.07.06
+ * Version: 2026.07.07
  *
  * Key fixes in this version:
  *  - HLS segments moved to /var/lib/webcameras/hls (off tmpfs)
@@ -288,18 +288,26 @@ async function startStream(camera) {
   stableTimer.unref();
 
   // Signal ready on first .ts segment
+  // Guard: ensure dir exists before watching (prewarm can race mkdirSync)
   let ready = false;
-  const watcher = fs.watch(dir, (event, filename) => {
-    if (!ready && filename && filename.endsWith('.ts')) {
-      ready = true;
-      try { watcher.close(); } catch {}
-      setTimeout(() => io.emit('stream:ready', { id }), 300);
-    }
-  });
+  let watcher = null;
+  try {
+    fs.mkdirSync(dir, { recursive: true }); // ensure exists before watch
+    watcher = fs.watch(dir, (event, filename) => {
+      if (!ready && filename && filename.endsWith('.ts')) {
+        ready = true;
+        try { watcher.close(); } catch {}
+        setTimeout(() => io.emit('stream:ready', { id }), 300);
+      }
+    });
+  } catch (watchErr) {
+    console.warn(`[stream] Could not watch dir for ${id}: ${watchErr.message}`);
+    // Fall through to timeout-based ready signal below
+  }
   setTimeout(() => {
     if (!ready) {
       ready = true;
-      try { watcher.close(); } catch {}
+      try { if (watcher) watcher.close(); } catch {}
       io.emit('stream:ready', { id });
     }
   }, 15000);

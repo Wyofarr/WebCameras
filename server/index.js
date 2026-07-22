@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * webcameras - Web-based IP camera display system
- * Version: 2026.07.05
+ * Version: 2026.07.06
  *
  * Key fixes in this version:
  *  - HLS segments moved to /var/lib/webcameras/hls (off tmpfs)

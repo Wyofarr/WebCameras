@@ -11,6 +11,7 @@ SERVICE_USER="webcameras"
 PORT="${PORT:-8080}"
 CONFIG_DIR="/etc/webcameras"
 HLS_DIR="/var/lib/webcameras/hls"
+PID_DIR="/var/lib/webcameras/pids"
 LOG_DIR="/var/log/webcameras"
 
 echo "---------------------------------------------"
@@ -42,7 +43,7 @@ fi
 
 # --- Install application ----------------------------------
 echo "[4/6] Installing WebCameras..."
-mkdir -p "$INSTALL_DIR" "$CONFIG_DIR" "$LOG_DIR" "$HLS_DIR"
+mkdir -p "$INSTALL_DIR" "$CONFIG_DIR" "$LOG_DIR" "$HLS_DIR" "$PID_DIR"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -65,7 +66,7 @@ for f in "$REPO_DIR/config/"*; do
 done
 
 chown -R "$SERVICE_USER:$SERVICE_USER" \
-  "$INSTALL_DIR" "$CONFIG_DIR" "$LOG_DIR" "$HLS_DIR"
+  "$INSTALL_DIR" "$CONFIG_DIR" "$LOG_DIR" "$HLS_DIR" "$PID_DIR"
 
 # --- Systemd service --------------------------------------
 echo "[5/6] Writing systemd service..."
@@ -85,6 +86,7 @@ Environment=NODE_ENV=production
 Environment=PORT=${PORT}
 Environment=CONFIG_PATH=${CONFIG_DIR}
 Environment=HLS_DIR=${HLS_DIR}
+Environment=PID_DIR=${PID_DIR}
 ExecStart=/usr/bin/node ${INSTALL_DIR}/server/index.js
 Restart=always
 RestartSec=5

@@ -8,6 +8,7 @@
 INSTALL_DIR="/opt/webcameras"
 CONFIG_DIR="/etc/webcameras"
 HLS_DIR="/var/lib/webcameras/hls"
+PID_DIR="/var/lib/webcameras/pids"
 LOG_DIR="/var/log/webcameras"
 SERVICE_USER="webcameras"
 PORT="${PORT:-8080}"
@@ -171,9 +172,9 @@ echo -e "${GREEN}OK${NC}"
 
 # --------------------------------------------------
 echo -n "  Ensuring HLS directory? "
-mkdir -p "$HLS_DIR"
+mkdir -p "$HLS_DIR" "$PID_DIR"
 chown -R "$SERVICE_USER:$SERVICE_USER" \
-  "$INSTALL_DIR" "$CONFIG_DIR" "$LOG_DIR" "$HLS_DIR" 2>/dev/null || true
+  "$INSTALL_DIR" "$CONFIG_DIR" "$LOG_DIR" "$HLS_DIR" "$PID_DIR" 2>/dev/null || true
 echo -e "${GREEN}OK${NC}"
 
 # --------------------------------------------------
@@ -193,6 +194,7 @@ Environment=NODE_ENV=production
 Environment=PORT=${PORT}
 Environment=CONFIG_PATH=${CONFIG_DIR}
 Environment=HLS_DIR=${HLS_DIR}
+Environment=PID_DIR=${PID_DIR}
 ExecStart=/usr/bin/node ${INSTALL_DIR}/server/index.js
 Restart=always
 RestartSec=5

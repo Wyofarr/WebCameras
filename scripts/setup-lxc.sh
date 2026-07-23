@@ -50,6 +50,8 @@ REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 cp -r "$REPO_DIR/server"     "$INSTALL_DIR/"
 cp -r "$REPO_DIR/public"     "$INSTALL_DIR/"
+# Ensure vendor dir (self-hosted HLS.js) is present
+mkdir -p "$INSTALL_DIR/public/vendor"
 cp -r "$REPO_DIR/scripts"    "$INSTALL_DIR/"
 cp    "$REPO_DIR/package.json" "$INSTALL_DIR/"
 

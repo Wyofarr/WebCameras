@@ -185,6 +185,8 @@ a { color: var(--accent); }
   display: flex; align-items: center; justify-content: center;
   cursor: pointer;
   transition: border-color 0.2s;
+  touch-action: manipulation; /* eliminates 300ms tap delay on mobile */
+  -webkit-tap-highlight-color: transparent;
 }
 .cam-cell:hover { border-color: var(--accent-dim); z-index: 10; }
 

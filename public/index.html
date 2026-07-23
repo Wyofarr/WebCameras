@@ -14,12 +14,20 @@
   <link rel="preload" href="/js/app.js" as="script" crossorigin>
   <link rel="stylesheet" href="/css/main.css">
   <script>
+    // HLS.js loader: local copy first, CDN fallback if missing
     window._hlsReady = false;
     function loadHlsJs(cb) {
       if (window.Hls) { cb(); return; }
       const s = document.createElement('script');
-      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.4.12/hls.min.js';
       s.onload = () => { window._hlsReady = true; cb(); };
+      s.onerror = () => {
+        // Fallback to CDN if local copy fails (e.g. first install before file exists)
+        const s2 = document.createElement('script');
+        s2.src = 'https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.4.12/hls.min.js';
+        s2.onload = () => { window._hlsReady = true; cb(); };
+        document.head.appendChild(s2);
+      };
+      s.src = '/vendor/hls.min.js';
       document.head.appendChild(s);
     }
     window.loadHlsJs = loadHlsJs;

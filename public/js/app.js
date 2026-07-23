@@ -34,7 +34,21 @@ if (socket) {
   socket.on('layouts:updated', () => fetchLayouts());
   socket.on('config:updated',  (cfg) => { state.config = cfg; applyConfig(); });
   socket.on('stream:ready',    ({ id }) => StreamManager.onReady(id));
-  socket.on('stream:stopped',  ({ id }) => StreamManager.onStopped(id));
+
+  // Track bulk stream failures and show a single toast instead of per-camera noise
+  let stoppedCount = 0, stoppedTimer = null;
+  socket.on('stream:stopped', ({ id }) => {
+    StreamManager.onStopped(id);
+    stoppedCount++;
+    if (stoppedTimer) clearTimeout(stoppedTimer);
+    stoppedTimer = setTimeout(() => {
+      if (stoppedCount > 1) {
+        Toast.show(`${stoppedCount} streams reconnecting…`, 'error', 5000);
+      }
+      stoppedCount = 0;
+      stoppedTimer = null;
+    }, 500);
+  });
 } else {
   init();
 }

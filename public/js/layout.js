@@ -11,6 +11,16 @@
  */
 
 import { StreamManager } from './stream.js';
+
+// Sanitize text for safe innerHTML insertion
+function esc(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
+}
 import { state }         from './app.js';
 
 export const LayoutManager = {
@@ -92,7 +102,7 @@ export const LayoutManager = {
     const label = document.createElement('div');
     label.className = 'cam-label';
     label.innerHTML = `
-      <span class="cam-name">${win.label || win.cameraId || 'Camera'}</span>
+      <span class="cam-name">${esc(win.label || win.cameraId || 'Camera')}</span>
       <span class="cam-time"></span>`;
     if (win.showLabel === false) label.style.display = 'none';
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * webcameras - Web-based IP camera display system
- * Version: 2026.07.08
+ * Version: 2026.07.09
  *
  * Stream management rewrite:
  *  - Kill by segment path pattern (pkill -f) instead of lsof — fast and reliable
@@ -224,7 +224,7 @@ function buildFfmpegArgs(camera, url, dir) {
     '-f', 'hls',
     '-hls_time', '2',
     '-hls_list_size', '4',           // fewer segments in playlist
-    '-hls_flags', 'delete_segments+append_list+omit_endlist+split_by_time',
+    '-hls_flags', 'delete_segments+append_list+omit_endlist+split_by_time+independent_segments',
     '-hls_segment_type', 'mpegts',
     '-hls_allow_cache', '0',
     '-hls_segment_filename', path.join(dir, 'seg%05d.ts'),
@@ -516,6 +516,14 @@ app.post('/api/streams/:cameraId/start', async (req, res) => {
   const { url, transport, username, password,
     resolution, bitrate, windowW, windowH, _pixelDims } = req.body;
   if (!url) return res.status(400).json({ error:'url required' });
+  // Rate limit: max 20 start requests per camera per minute
+  const key = req.params.cameraId;
+  const count = (streamStartCounts.get(key) || 0) + 1;
+  streamStartCounts.set(key, count);
+  if (count > 20) {
+    console.warn(`[ratelimit] Too many start requests for ${key}`);
+    return res.status(429).json({ error:'Too many requests' });
+  }
   await startStream({ id:req.params.cameraId, url, transport,
     username, password, resolution, bitrate, windowW, windowH, _pixelDims });
   res.json({ ok:true, hlsUrl:`/hls/${req.params.cameraId}/stream.m3u8` });
@@ -610,6 +618,26 @@ app.get('/api/system', (req, res) => {
   res.json(info);
 });
 
+app.get('/health', (req, res) => {
+  // Quick health check — useful for Proxmox monitoring and load balancers
+  const healthy = activeStreams.size >= 0; // server is up
+  let ffmpegAvailable = false;
+  try { execSync('which ffmpeg', { timeout:1000 }); ffmpegAvailable = true; }
+  catch {}
+  res.status(healthy ? 200 : 503).json({
+    status:   healthy ? 'ok' : 'degraded',
+    version:  pkg.version,
+    streams:  activeStreams.size,
+    ffmpeg:   ffmpegAvailable,
+    uptime:   Math.floor(process.uptime()),
+    memory:   Math.round(process.memoryUsage().rss / 1024 / 1024) + 'MB'
+  });
+});
+
+// Rate limit stream start — max 20 starts per minute per camera
+const streamStartCounts = new Map();
+setInterval(() => streamStartCounts.clear(), 60000);
+
 app.get('/config', (req, res) =>
   res.sendFile(path.join(__dirname, '../public/config.html')));
 app.get('*', (req, res) =>
@@ -622,10 +650,16 @@ io.on('connection', socket => {
     console.log(`[ws] Disconnected: ${socket.id}`));
 });
 
+let chokidarDebounce = null;
 chokidar.watch(CONFIG_PATH, { ignoreInitial:true }).on('all', (_, p) => {
   console.log(`[config] Changed: ${path.basename(p)}`);
   invalidateCache(); refreshCameraRegistry();
-  io.emit('layouts:updated');
+  // Debounce 300ms — a single save triggers multiple fs events
+  if (chokidarDebounce) clearTimeout(chokidarDebounce);
+  chokidarDebounce = setTimeout(() => {
+    io.emit('layouts:updated');
+    chokidarDebounce = null;
+  }, 300);
 });
 
 // ── Startup ───────────────────────────────────────────────────────────────────

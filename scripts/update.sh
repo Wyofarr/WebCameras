@@ -148,6 +148,7 @@ echo -e "${GREEN}OK${NC}"
 echo -n "  Installing new files? "
 cp -r "$TMP_DIR/server"       "$INSTALL_DIR/" >> "$LOG" 2>&1
 cp -r "$TMP_DIR/public"       "$INSTALL_DIR/" >> "$LOG" 2>&1
+mkdir -p "$INSTALL_DIR/public/vendor"
 cp -r "$TMP_DIR/scripts"      "$INSTALL_DIR/" >> "$LOG" 2>&1
 cp    "$TMP_DIR/package.json" "$INSTALL_DIR/" >> "$LOG" 2>&1
 

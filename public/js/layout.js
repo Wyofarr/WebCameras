@@ -36,8 +36,8 @@ export const LayoutManager = {
     const grid = document.getElementById('camera-grid');
     const windows = layout.windows || [];
 
-    // Stop all existing streams & clear grid
-    for (const [id] of this._cells) StreamManager.detach(id);
+    // Detach HLS.js instances from old cells (does NOT stop server streams)
+    for (const [id] of this._cells) StreamManager.detachHls(id);
     this._cells.clear();
     grid.innerHTML = '';
 
@@ -119,7 +119,7 @@ export const LayoutManager = {
     // Click → fullscreen
     el.addEventListener('click', () => {
       const cam = this._findCamera(win.cameraId || win.id, state.layouts[state.currentPage]);
-      if (cam) StreamManager.openFullscreen(cam, video);
+      if (cam) StreamManager.openFullscreen(cam);
     });
 
     // Tick the timestamp

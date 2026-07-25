@@ -641,6 +641,12 @@ function renderCameraList() {
           &nbsp;·&nbsp;${c.type||'rtsp'}&nbsp;·&nbsp;${c.transport||'tcp'}</div>
       </div>
       <div class="cam-actions">
+        <button class="btn btn-sm" onclick="toggleCameraEnabled('${esc(c.id)}')"
+          style="border:1px solid ${c.enabled===false?'var(--text-dim)':'var(--accent-dim)'};
+          background:var(--surface3);color:${c.enabled===false?'var(--text-dim)':'var(--accent)'};
+          border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer;font-weight:600">
+          ${c.enabled===false?'OFF':'ON'}
+        </button>
         <button class="btn btn-secondary btn-sm" onclick="openEditCamera('${esc(c.id)}')">Edit</button>
         <button class="btn btn-danger btn-sm" onclick="deleteCamera('${esc(c.id)}')">Delete</button>
       </div>
@@ -1190,22 +1196,38 @@ async function pollStatus() {
     const ss = document.getElementById('stream-status');
     const ids = Object.keys(streams);
     if (!ids.length) {
-      ss.innerHTML = '<div class="empty">No active streams</div>';
+      ss.innerHTML = '<div class="empty">No cameras configured</div>';
     } else {
       ss.innerHTML = ids.map(id => {
         const s = streams[id];
-        const age = Math.round((Date.now()-s.startedAt)/1000);
+        const live = s.live;
+        const age  = live && s.startedAt
+          ? Math.round((Date.now()-s.startedAt)/1000) + 's' : '—';
+        const crashBadge = s.crashes > 0
+          ? `<span class="badge" style="color:var(--yellow);border-color:var(--yellow)">
+               ${s.crashes} crash${s.crashes>1?'es':''}</span>` : '';
         return `<div class="cam-card">
-          <div class="cam-dot live"></div>
+          <div class="cam-dot ${live?'live':''}"></div>
           <div class="cam-card-info">
-            <div class="cam-card-name monospace">${esc(id)}</div>
-            <div class="cam-card-url">${esc(s.hlsUrl)}</div>
-            <div class="cam-card-meta">Up ${age}s · ${s.clients} client(s)</div>
+            <div class="cam-card-name">${esc(s.label||id)}</div>
+            <div class="cam-card-url monospace" style="font-size:10px">${esc(s.hlsUrl)}</div>
+            <div class="cam-card-meta">
+              ${live?'Up '+age:'idle'} · ${s.enabled===false?'disabled':'enabled'}
+            </div>
           </div>
-          <span class="badge live">LIVE</span>
+          <div style="display:flex;gap:4px;align-items:center">
+            ${crashBadge}
+            <span class="badge ${live?'live':''}">${live?'LIVE':'idle'}</span>
+          </div>
         </div>`;
       }).join('');
     }
+
+    // Update dot badges on camera cards
+    document.querySelectorAll('[id^="dot-"]').forEach(el => {
+      const id = el.id.replace('dot-','');
+      el.classList.toggle('live', !!(streams[id]&&streams[id].live));
+    });
 
     // Server info
     document.getElementById('server-info').innerHTML =
@@ -1231,6 +1253,15 @@ function toast(msg, type='', ms=3000) {
   c.appendChild(el);
   setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .3s';
     setTimeout(()=>el.remove(),300); }, ms);
+}
+
+async function toggleCameraEnabled(id) {
+  try {
+    await fetch(`/api/streams/${encodeURIComponent(id)}/toggle`, { method:'POST' });
+    await loadLayouts();
+    renderCameraList();
+    toast('Camera ' + (id) + ' toggled', 'ok');
+  } catch(e) { toast('Failed to toggle camera', 'err'); }
 }
 
 function mobileShowSec(name, btn) {

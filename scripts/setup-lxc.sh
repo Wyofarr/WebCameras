@@ -74,30 +74,30 @@ chown -R "$SERVICE_USER:$SERVICE_USER" \
 echo "[5/6] Writing systemd service..."
 
 # Always write a clean service file - no sandbox options (incompatible with LXC)
-cat > /etc/systemd/system/webcameras.service << SVCEOF
-[Unit]
-Description=WebCameras ? Web IP Camera Display
-After=network.target
-
-[Service]
-Type=simple
-User=${SERVICE_USER}
-Group=${SERVICE_USER}
-WorkingDirectory=${INSTALL_DIR}
-Environment=NODE_ENV=production
-Environment=PORT=${PORT}
-Environment=CONFIG_PATH=${CONFIG_DIR}
-Environment=HLS_DIR=${HLS_DIR}
-Environment=PID_DIR=${PID_DIR}
-ExecStart=/usr/bin/node ${INSTALL_DIR}/server/index.js
-Restart=always
-RestartSec=5
-StandardOutput=append:${LOG_DIR}/app.log
-StandardError=append:${LOG_DIR}/error.log
-
-[Install]
-WantedBy=multi-user.target
-SVCEOF
+# Using printf instead of heredoc to prevent corruption issues
+SVC_FILE="/etc/systemd/system/webcameras.service"
+printf '[Unit]\n' > "$SVC_FILE"
+printf 'Description=WebCameras Web IP Camera Display\n' >> "$SVC_FILE"
+printf 'After=network.target\n' >> "$SVC_FILE"
+printf '\n' >> "$SVC_FILE"
+printf '[Service]\n' >> "$SVC_FILE"
+printf 'Type=simple\n' >> "$SVC_FILE"
+printf 'User=%s\n' "$SERVICE_USER" >> "$SVC_FILE"
+printf 'Group=%s\n' "$SERVICE_USER" >> "$SVC_FILE"
+printf 'WorkingDirectory=%s\n' "$INSTALL_DIR" >> "$SVC_FILE"
+printf 'Environment=NODE_ENV=production\n' >> "$SVC_FILE"
+printf 'Environment=PORT=%s\n' "$PORT" >> "$SVC_FILE"
+printf 'Environment=CONFIG_PATH=%s\n' "$CONFIG_DIR" >> "$SVC_FILE"
+printf 'Environment=HLS_DIR=%s\n' "$HLS_DIR" >> "$SVC_FILE"
+printf 'Environment=PID_DIR=%s\n' "$PID_DIR" >> "$SVC_FILE"
+printf 'ExecStart=/usr/bin/node %s/server/index.js\n' "$INSTALL_DIR" >> "$SVC_FILE"
+printf 'Restart=always\n' >> "$SVC_FILE"
+printf 'RestartSec=5\n' >> "$SVC_FILE"
+printf 'StandardOutput=append:%s/app.log\n' "$LOG_DIR" >> "$SVC_FILE"
+printf 'StandardError=append:%s/error.log\n' "$LOG_DIR" >> "$SVC_FILE"
+printf '\n' >> "$SVC_FILE"
+printf '[Install]\n' >> "$SVC_FILE"
+printf 'WantedBy=multi-user.target\n' >> "$SVC_FILE"
 
 systemctl daemon-reload
 systemctl enable webcameras

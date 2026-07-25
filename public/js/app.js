@@ -35,7 +35,15 @@ if (socket) {
   socket.on('config:updated',  (cfg) => { state.config = cfg; applyConfig(); });
   socket.on('stream:ready',    ({ id }) => StreamManager.onReady(id));
 
-  // Track bulk stream failures and show a single toast instead of per-camera noise
+  // streams:status — sent on connect, tells browser what's already live
+  socket.on('streams:status', (status) => {
+    // If a stream is already live, signal ready immediately
+    for (const [id, info] of Object.entries(status)) {
+      if (info.live) StreamManager.onReady(id);
+    }
+  });
+
+  // Track bulk stream failures and show a single toast
   let stoppedCount = 0, stoppedTimer = null;
   socket.on('stream:stopped', ({ id }) => {
     StreamManager.onStopped(id);
@@ -234,20 +242,23 @@ export async function showInfoPopup() {
       }
     }
 
-    if (allCams.length === 0) {
+    // New streams API returns ALL configured cameras with live/idle status
+    const streamIds = Object.keys(streams);
+    if (!streamIds.length) {
       camsEl.innerHTML = '<div style="font-size:12px;color:var(--text-dim)">No cameras configured</div>';
     } else {
-      for (const cam of allCams) {
-        const live = !!streams[cam.id];
-        const crashes = streams[cam.id]?.crashes || 0;
+      for (const [id, s] of Object.entries(streams)) {
         const row = document.createElement('div');
         row.className = 'info-cam-row';
+        const disabled = s.enabled === false;
         row.innerHTML = `
-          <div class="info-cam-dot ${live ? 'live' : ''}"></div>
-          <span class="info-cam-name">${cam.label || cam.id}</span>
+          <div class="info-cam-dot ${s.live ? 'live' : ''}"></div>
+          <span class="info-cam-name" style="${disabled?'opacity:0.4':''}">
+            ${s.label || id}
+          </span>
           <span class="info-cam-status">
-            ${live ? 'LIVE' : 'idle'}
-            ${crashes > 0 ? `<span style="color:var(--yellow)"> ⚠${crashes}</span>` : ''}
+            ${disabled ? 'off' : s.live ? 'LIVE' : 'idle'}
+            ${s.crashes > 0 ? '<span style="color:var(--yellow)"> ⚠'+s.crashes+'</span>' : ''}
           </span>`;
         camsEl.appendChild(row);
       }

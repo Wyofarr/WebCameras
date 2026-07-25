@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /**
  * webcameras - Web-based IP camera display system
- * Version: 2026.07.09
+ * Version: 2026.07.10
  *
- * Stream management rewrite:
- *  - Kill by segment path pattern (pkill -f) instead of lsof — fast and reliable
- *  - PID lockfile per camera — survives server restarts, prevents ghost processes
- *  - Hard client cap: max 1 ffmpeg process per camera regardless of browser tabs
- *  - Staggered startup: cameras start 2s apart to avoid CPU spike
- *  - Reduced default bitrate to 1500k (sufficient for 720p, much lighter on CPU)
+ * Always-on stream model:
+ *  - ALL configured cameras stream continuously from server start
+ *  - Streams never stop because a browser disconnected
+ *  - Browser just attaches HLS.js to already-running segments
+ *  - Per-camera 'enabled' flag to disable without deleting
+ *  - Config changes trigger a sync: new cameras start, removed cameras stop
  */
 
 const express     = require('express');
@@ -23,7 +23,7 @@ const pkg         = require('../package.json');
 
 const CONFIG_PATH = process.env.CONFIG_PATH || path.join(__dirname, '../config');
 const PORT        = process.env.PORT || 8080;
-const HLS_DIR     = process.env.HLS_DIR || '/var/lib/webcameras/hls';
+const HLS_DIR     = process.env.HLS_DIR  || '/var/lib/webcameras/hls';
 const PID_DIR     = process.env.PID_DIR  || '/var/lib/webcameras/pids';
 
 const app    = express();
@@ -34,6 +34,7 @@ app.use(compression());
 app.use(express.json());
 app.use('/js',  express.static(path.join(__dirname, '../public/js'),  { maxAge: '7d', etag: true }));
 app.use('/css', express.static(path.join(__dirname, '../public/css'), { maxAge: '7d', etag: true }));
+app.use('/vendor', express.static(path.join(__dirname, '../public/vendor'), { maxAge: '30d', etag: true }));
 app.use(express.static(path.join(__dirname, '../public'), { maxAge: 0, etag: true }));
 app.use('/hls', express.static(HLS_DIR, {
   setHeaders: (res) => {
@@ -54,7 +55,8 @@ function loadConfig() {
     startsleep:2, feedsleep:2, retry:3, defaultPage:'' };
   try {
     _configCache = { ...defaults,
-      ...JSON.parse(fs.readFileSync(path.join(CONFIG_PATH,'webcameras.conf.json'),'utf8')) };
+      ...JSON.parse(fs.readFileSync(
+        path.join(CONFIG_PATH,'webcameras.conf.json'),'utf8')) };
   } catch { _configCache = defaults; }
   return _configCache;
 }
@@ -67,9 +69,10 @@ function loadLayouts() {
       .filter(f => f.startsWith('layout.') && f.endsWith('.json'))
       .forEach(file => {
         const name = file.replace(/^layout\./,'').replace(/\.json$/,'');
-        try { layouts[name] = JSON.parse(
-          fs.readFileSync(path.join(CONFIG_PATH, file),'utf8')); }
-        catch(e) { console.error(`Failed to load ${file}:`, e.message); }
+        try {
+          layouts[name] = JSON.parse(
+            fs.readFileSync(path.join(CONFIG_PATH, file),'utf8'));
+        } catch(e) { console.error(`Failed to load ${file}:`, e.message); }
       });
   } catch(e) { console.error('Failed to read config dir:', e.message); }
   _layoutsCache = layouts;
@@ -77,70 +80,69 @@ function loadLayouts() {
 }
 
 function invalidateCache() { _configCache = null; _layoutsCache = null; }
+
 function saveLayout(name, data) {
-  fs.writeFileSync(path.join(CONFIG_PATH,`layout.${name}.json`),
-    JSON.stringify(data,null,2));
+  fs.writeFileSync(
+    path.join(CONFIG_PATH,`layout.${name}.json`), JSON.stringify(data,null,2));
   invalidateCache();
 }
+
 function deleteLayout(name) {
   const file = path.join(CONFIG_PATH,`layout.${name}.json`);
   if (fs.existsSync(file)) fs.unlinkSync(file);
   invalidateCache();
 }
 
-// ── Camera registry ───────────────────────────────────────────────────────────
-const cameraRegistry = new Map();
+// ── Camera registry — all cameras across all layouts ─────────────────────────
+const cameraRegistry = new Map(); // id → camera config
+
+function getAllCameras() {
+  const seen = new Set();
+  const cameras = [];
+  for (const layout of Object.values(loadLayouts())) {
+    for (const cam of (layout.cameras || [])) {
+      if (!seen.has(cam.id)) {
+        seen.add(cam.id);
+        cameras.push(cam);
+      }
+    }
+  }
+  return cameras;
+}
+
 function refreshCameraRegistry() {
-  for (const layout of Object.values(loadLayouts()))
-    for (const cam of (layout.cameras || []))
-      cameraRegistry.set(cam.id, cam);
+  for (const cam of getAllCameras()) {
+    cameraRegistry.set(cam.id, cam);
+  }
 }
 
 // ── PID lockfile helpers ──────────────────────────────────────────────────────
-// One lockfile per camera ID. Written on start, deleted on clean stop.
-// On restart, any process matching the lockfile PID is killed first.
-function pidFile(id) { return path.join(PID_DIR, `${id}.pid`); }
-
-function readPidFile(id) {
-  try { return parseInt(fs.readFileSync(pidFile(id), 'utf8').trim()); }
+function pidFile(id)      { return path.join(PID_DIR, `${id}.pid`); }
+function readPidFile(id)  {
+  try { return parseInt(fs.readFileSync(pidFile(id),'utf8').trim()); }
   catch { return null; }
 }
-
 function writePidFile(id, pid) {
   try { fs.writeFileSync(pidFile(id), String(pid)); } catch {}
 }
-
 function deletePidFile(id) {
   try { fs.unlinkSync(pidFile(id)); } catch {}
 }
 
 // ── Kill all ffmpeg processes for a camera ────────────────────────────────────
-// Uses three methods in order — fast, reliable, no lsof dependency:
-//   1. Kill by PID from lockfile (handles clean restart after server crash)
-//   2. pkill by HLS segment path pattern (kills any process writing to this dir)
-//   3. Kill via our own process handle if we have one
 function killStreamProcesses(id) {
   const segPath = path.join(HLS_DIR, id, 'seg');
-
-  // Method 1: lockfile PID
   const lockedPid = readPidFile(id);
   if (lockedPid) {
-    try { process.kill(lockedPid, 'SIGKILL'); }
-    catch {}
+    try { process.kill(lockedPid, 'SIGKILL'); } catch {}
   }
-
-  // Method 2: pkill by segment path — catches ALL ffmpeg writing to this camera
-  // This is the nuclear option that gets ghost processes
   try {
     execSync(`pkill -9 -f "${segPath}" 2>/dev/null || true`, { timeout: 2000 });
   } catch {}
-
-  // Method 3: our tracked process handle
   const s = activeStreams.get(id);
   if (s && s.process && !s.process.killed) {
     try { s.process.kill('SIGKILL'); } catch {}
   }
-
   deletePidFile(id);
 }
 
@@ -182,18 +184,17 @@ function buildVideoFilter(resolution, windowW, windowH, pixelDims) {
     const aspect = pixelDims
       ? windowW / windowH
       : (windowW * 1920) / (windowH * 1080);
-    const targetH = h;
-    const targetW = Math.round(targetH * aspect / 2) * 2;
+    const targetW = Math.round(h * aspect / 2) * 2;
     return ['-vf',
-      `scale=${targetW}:${targetH}:force_original_aspect_ratio=decrease,` +
-      `pad=${targetW}:${targetH}:(ow-iw)/2:(oh-ih)/2:black,setsar=1`];
+      `scale=${targetW}:${h}:force_original_aspect_ratio=decrease,` +
+      `pad=${targetW}:${h}:(ow-iw)/2:(oh-ih)/2:black,setsar=1`];
   }
   return ['-vf', `scale=-2:${h}`];
 }
 
 function buildFfmpegArgs(camera, url, dir) {
-  const transport  = camera.transport   || 'tcp';
-  const resolution = camera.resolution  || '720';
+  const transport  = camera.transport  || 'tcp';
+  const resolution = camera.resolution || '720';
   const bitrate    = parseInt(camera.bitrate) || 1500;
   const playlist   = path.join(dir, 'stream.m3u8');
 
@@ -204,27 +205,25 @@ function buildFfmpegArgs(camera, url, dir) {
         ...buildVideoFilter(resolution, camera.windowW, camera.windowH,
           camera._pixelDims),
         '-b:v', `${bitrate}k`, '-maxrate', `${bitrate}k`,
-        '-bufsize', `${bitrate}k`,   // tighter buffer = less CPU buffering
-        '-g', '60',                  // keyframe every 60 frames @ 30fps = 2s
-        '-sc_threshold', '0',
+        '-bufsize', `${bitrate}k`,
+        '-g', '60', '-sc_threshold', '0',
         '-pix_fmt', 'yuv420p',
-        '-threads', '1',             // 1 thread per ffmpeg = predictable CPU
+        '-threads', '1',
       ];
 
   return [
     '-hide_banner', '-loglevel', 'warning',
-    '-fflags', 'nobuffer',
-    '-flags', 'low_delay',
+    '-fflags', 'nobuffer', '-flags', 'low_delay',
     '-rtsp_transport', transport,
-    '-rtbufsize', '256k',            // smaller input buffer
+    '-rtbufsize', '256k',
     '-i', url,
     ...videoArgs,
-    '-c:a', 'aac', '-b:a', '64k',   // lower audio bitrate
-    '-ac', '1',
+    '-c:a', 'aac', '-b:a', '64k', '-ac', '1',
     '-f', 'hls',
     '-hls_time', '2',
-    '-hls_list_size', '4',           // fewer segments in playlist
-    '-hls_flags', 'delete_segments+append_list+omit_endlist+split_by_time+independent_segments',
+    '-hls_list_size', '4',
+    '-hls_flags',
+      'delete_segments+append_list+omit_endlist+split_by_time+independent_segments',
     '-hls_segment_type', 'mpegts',
     '-hls_allow_cache', '0',
     '-hls_segment_filename', path.join(dir, 'seg%05d.ts'),
@@ -233,44 +232,42 @@ function buildFfmpegArgs(camera, url, dir) {
 }
 
 // ── Stream state ──────────────────────────────────────────────────────────────
-const activeStreams = new Map();
-const crashCounts  = new Map();
-const restartTimers = new Map();
-const BACKOFF_MS   = [3000, 6000, 12000, 30000, 60000];
+const activeStreams  = new Map(); // id → { process, pid, startedAt, camera }
+const crashCounts   = new Map(); // id → number
+const restartTimers = new Map(); // id → timer
+const BACKOFF_MS    = [3000, 6000, 12000, 30000, 60000];
 
 function getBackoff(id) {
-  const n = crashCounts.get(id) || 0;
-  return BACKOFF_MS[Math.min(n, BACKOFF_MS.length - 1)];
+  return BACKOFF_MS[Math.min(crashCounts.get(id)||0, BACKOFF_MS.length-1)];
 }
 
-// ── Start stream ──────────────────────────────────────────────────────────────
+// ── Start stream (always-on — no client counter) ──────────────────────────────
 async function startStream(camera) {
   const { id } = camera;
   const url = buildAuthUrl(camera.url, camera.username, camera.password);
 
   cameraRegistry.set(id, camera);
 
-  // Hard guard: if a process is already tracked and alive, just increment clients
+  // Already running — nothing to do
   if (activeStreams.has(id)) {
-    activeStreams.get(id).clients++;
-    console.log(`[stream] Reusing: ${id} (clients: ${activeStreams.get(id).clients})`);
+    console.log(`[stream] Already running: ${id}`);
     return;
   }
 
-  // Cancel any pending restart timer
+  // Skip disabled cameras
+  if (camera.enabled === false) {
+    console.log(`[stream] Skipping disabled camera: ${id}`);
+    return;
+  }
+
   if (restartTimers.has(id)) {
     clearTimeout(restartTimers.get(id));
     restartTimers.delete(id);
   }
 
-  // Kill ALL existing processes for this camera before starting fresh
-  console.log(`[stream] Killing any existing processes for: ${id}`);
+  // Kill any stale processes before starting fresh
   killStreamProcesses(id);
-
-  // Brief pause to ensure killed processes have released file handles
-  await new Promise(r => setTimeout(r, 500));
-
-  // Clean HLS dir so new process starts from seg00000
+  await new Promise(r => setTimeout(r, 300));
   cleanStreamDir(id);
 
   const dir = path.join(HLS_DIR, id);
@@ -283,9 +280,8 @@ async function startStream(camera) {
     stdio: ['ignore', 'ignore', 'pipe']
   });
 
-  // Write PID to lockfile immediately
   writePidFile(id, proc.pid);
-  console.log(`[stream] PID ${proc.pid} -> ${pidFile(id)}`);
+  console.log(`[stream] PID ${proc.pid} locked for ${id}`);
 
   proc.stderr.on('data', d => {
     const line = d.toString().trim();
@@ -293,13 +289,11 @@ async function startStream(camera) {
   });
 
   proc.on('exit', (code, signal) => {
-    console.log(`[stream] Stopped: ${id} (code ${code}, signal ${signal}, pid ${proc.pid})`);
+    console.log(`[stream] Stopped: ${id} (code=${code} signal=${signal} pid=${proc.pid})`);
 
-    // Only act on exit if this is still the tracked process
-    // (prevents old ghost processes triggering restarts)
     const current = activeStreams.get(id);
     if (!current || current.pid !== proc.pid) {
-      console.log(`[stream] Ignoring exit of stale process ${proc.pid} for ${id}`);
+      console.log(`[stream] Ignoring stale exit for ${id} (pid ${proc.pid})`);
       deletePidFile(id);
       return;
     }
@@ -308,39 +302,34 @@ async function startStream(camera) {
     deletePidFile(id);
     io.emit('stream:stopped', { id });
 
-    // Don't restart if killed intentionally (SIGTERM/SIGKILL)
+    // Don't restart intentionally killed streams
     if (signal === 'SIGTERM' || signal === 'SIGKILL') {
-      console.log(`[stream] ${id} killed intentionally — no restart`);
+      console.log(`[stream] ${id} stopped intentionally`);
       return;
     }
 
+    // Always restart — this is an always-on system
     const count = (crashCounts.get(id) || 0) + 1;
     crashCounts.set(id, count);
     const delay = getBackoff(id);
-    console.log(`[stream] Restarting ${id} in ${delay}ms (attempt ${count})`);
+    console.log(`[stream] Will restart ${id} in ${delay}ms (attempt ${count})`);
 
     const t = setTimeout(async () => {
       restartTimers.delete(id);
-      if (io.sockets.sockets.size === 0 && !activeStreams.has(id)) {
-        console.log(`[stream] No clients — skipping restart of ${id}`);
-        return;
-      }
       const cam = cameraRegistry.get(id);
-      if (cam) await startStream(cam);
+      if (cam && cam.enabled !== false) {
+        await startStream(cam);
+      }
     }, delay);
-
     restartTimers.set(id, t);
   });
 
   activeStreams.set(id, {
-    process: proc,
-    pid: proc.pid,
-    clients: 1,
-    startedAt: Date.now(),
-    camera
+    process: proc, pid: proc.pid,
+    startedAt: Date.now(), camera
   });
 
-  // Reset crash count after 2 minutes of stable uptime
+  // Reset crash count after 2 minutes stable
   const stableTimer = setTimeout(() => {
     if (activeStreams.has(id) && activeStreams.get(id).pid === proc.pid) {
       crashCounts.set(id, 0);
@@ -349,9 +338,8 @@ async function startStream(camera) {
   }, 120000);
   stableTimer.unref();
 
-  // Watch for first segment — ensure dir exists first
-  let ready = false;
-  let watcher = null;
+  // Signal ready on first .ts segment
+  let ready = false, watcher = null;
   try {
     fs.mkdirSync(dir, { recursive: true });
     watcher = fs.watch(dir, (event, filename) => {
@@ -373,71 +361,110 @@ async function startStream(camera) {
   }, 15000);
 }
 
+// ── Stop stream permanently (only called when camera deleted/disabled) ────────
 function stopStream(id) {
   const s = activeStreams.get(id);
-  if (!s) return;
-  s.clients = Math.max(0, s.clients - 1);
-  if (s.clients <= 0) {
-    console.log(`[stream] Stopping: ${id} (pid ${s.pid})`);
+  if (s) {
+    console.log(`[stream] Permanently stopping: ${id}`);
     killStreamProcesses(id);
     activeStreams.delete(id);
-    crashCounts.delete(id);
-    if (restartTimers.has(id)) {
+  }
+  crashCounts.delete(id);
+  if (restartTimers.has(id)) {
+    clearTimeout(restartTimers.get(id));
+    restartTimers.delete(id);
+  }
+}
+
+// ── Sync running streams with current config ──────────────────────────────────
+// Called on startup and whenever config changes.
+// Starts new cameras, stops removed/disabled ones.
+async function syncStreams() {
+  const configured = getAllCameras();
+  const configuredIds = new Set(configured.map(c => c.id));
+
+  // Stop streams for cameras that no longer exist or are disabled
+  for (const [id] of activeStreams) {
+    const cam = cameraRegistry.get(id);
+    if (!configuredIds.has(id) || cam?.enabled === false) {
+      console.log(`[sync] Stopping removed/disabled camera: ${id}`);
+      stopStream(id);
+    }
+  }
+
+  // Also cancel restart timers for removed cameras
+  for (const [id] of restartTimers) {
+    if (!configuredIds.has(id)) {
       clearTimeout(restartTimers.get(id));
       restartTimers.delete(id);
     }
   }
+
+  // Start new cameras that aren't running yet, staggered 2s apart
+  const toStart = configured.filter(
+    c => c.enabled !== false && !activeStreams.has(c.id)
+  );
+
+  if (toStart.length > 0) {
+    console.log(`[sync] Starting ${toStart.length} camera(s)...`);
+    for (const cam of toStart) {
+      // Find window dims for this camera from any layout
+      const dims = getCameraWindowDims(cam.id);
+      await startStream({ ...cam, ...dims });
+      if (toStart.length > 1) {
+        await new Promise(r => setTimeout(r, 2000));
+      }
+    }
+  }
+}
+
+// Get window dimensions for a camera from its layout (for aspect ratio padding)
+function getCameraWindowDims(cameraId) {
+  for (const layout of Object.values(loadLayouts())) {
+    const win = (layout.windows || []).find(
+      w => w.cameraId === cameraId || w.id === cameraId
+    );
+    if (win) return { windowW: win.w, windowH: win.h };
+  }
+  return {};
 }
 
 // ── Startup cleanup ───────────────────────────────────────────────────────────
-// On server start, kill any ffmpeg processes left from a previous run
 function killAllLegacyProcesses() {
-  console.log('[startup] Killing any legacy ffmpeg processes...');
+  console.log('[startup] Killing legacy ffmpeg processes...');
   try {
     execSync(`pkill -9 -f "${HLS_DIR}" 2>/dev/null || true`, { timeout: 3000 });
   } catch {}
-
-  // Also kill anything referenced in PID files
   try {
-    const pids = fs.readdirSync(PID_DIR).filter(f => f.endsWith('.pid'));
-    for (const pidFile2 of pids) {
+    fs.readdirSync(PID_DIR).filter(f => f.endsWith('.pid')).forEach(f => {
       try {
-        const pid = parseInt(fs.readFileSync(
-          path.join(PID_DIR, pidFile2), 'utf8').trim());
+        const pid = parseInt(fs.readFileSync(path.join(PID_DIR,f),'utf8').trim());
         if (pid) process.kill(pid, 'SIGKILL');
       } catch {}
-      try { fs.unlinkSync(path.join(PID_DIR, pidFile2)); } catch {}
-    }
+      try { fs.unlinkSync(path.join(PID_DIR, f)); } catch {}
+    });
   } catch {}
-
-  console.log('[startup] Legacy process cleanup complete');
+  console.log('[startup] Done');
 }
 
 // ── CPU watchdog ──────────────────────────────────────────────────────────────
-// Simpler than before: just count total ffmpeg processes.
-// If more than (cameras + 1) are running, kill all and let them restart clean.
 setInterval(() => {
   try {
-    const result = execSync(
-      `pgrep -c -f "${HLS_DIR}" 2>/dev/null || echo 0`,
-      { timeout: 2000 }
-    ).toString().trim();
-    const count = parseInt(result) || 0;
+    const count = parseInt(
+      execSync(`pgrep -c -f "${HLS_DIR}" 2>/dev/null || echo 0`,
+        { timeout:2000 }).toString().trim()) || 0;
     const expected = activeStreams.size;
     if (count > expected + 2) {
-      console.warn(
-        `[watchdog] ${count} ffmpeg processes but only ${expected} tracked — ` +
-        `killing all and restarting`
-      );
+      console.warn(`[watchdog] ${count} ffmpeg but ${expected} tracked — resetting`);
       try {
-        execSync(`pkill -9 -f "${HLS_DIR}" 2>/dev/null || true`,
-          { timeout: 2000 });
+        execSync(`pkill -9 -f "${HLS_DIR}" 2>/dev/null || true`, { timeout:2000 });
       } catch {}
-      // Clear all active streams — they'll restart via their exit handlers
-      for (const [id, s] of activeStreams) {
+      for (const [id] of activeStreams) {
         deletePidFile(id);
         activeStreams.delete(id);
       }
+      // Re-sync after a brief pause
+      setTimeout(syncStreams, 3000);
     }
   } catch {}
 }, 15000);
@@ -445,47 +472,24 @@ setInterval(() => {
 // ── Disk guard ────────────────────────────────────────────────────────────────
 setInterval(() => {
   try {
-    const out = execSync(`df "${HLS_DIR}" | tail -1`, { timeout:2000 })
-      .toString().trim().split(/\s+/);
-    const pct = parseInt(out[4]);
+    const pct = parseInt(
+      execSync(`df "${HLS_DIR}" | tail -1`, { timeout:2000 })
+      .toString().trim().split(/\s+/)[4]);
     if (pct > 90) {
-      console.error(`[disk] HLS partition ${pct}% full — stopping streams`);
-      io.emit('system:warning', { message:`Disk ${pct}% full — streams paused` });
+      console.error(`[disk] ${pct}% full — stopping streams`);
+      io.emit('system:warning', { message:`Disk ${pct}% full` });
       for (const [id] of activeStreams) stopStream(id);
     }
   } catch {}
 }, 60000);
-
-// ── Staggered prewarm ─────────────────────────────────────────────────────────
-// Start cameras one at a time, 2 seconds apart, to avoid CPU spike on boot
-async function prewarmDefaultPage() {
-  const config  = loadConfig();
-  const layouts = loadLayouts();
-  const pageName = config.defaultPage || Object.keys(layouts)[0];
-  if (!pageName || !layouts[pageName]) return;
-
-  const layout  = layouts[pageName];
-  const windows = layout.windows || [];
-  const cameras = layout.cameras || [];
-
-  console.log(`[prewarm] Staggered start for page: ${pageName}`);
-
-  for (const win of windows) {
-    const cam = cameras.find(c => c.id === (win.cameraId || win.id));
-    if (!cam) continue;
-    await startStream({ ...cam, windowW: win.w, windowH: win.h });
-    // Wait 2s between each camera to stagger CPU load
-    await new Promise(r => setTimeout(r, 2000));
-  }
-}
 
 // ── API ───────────────────────────────────────────────────────────────────────
 app.get('/api/config', (req, res) => res.json(loadConfig()));
 
 app.put('/api/config', (req, res) => {
   const conf = { ...loadConfig(), ...req.body };
-  fs.writeFileSync(path.join(CONFIG_PATH,'webcameras.conf.json'),
-    JSON.stringify(conf,null,2));
+  fs.writeFileSync(
+    path.join(CONFIG_PATH,'webcameras.conf.json'), JSON.stringify(conf,null,2));
   invalidateCache();
   io.emit('config:updated', conf);
   res.json(conf);
@@ -502,48 +506,89 @@ app.get('/api/layouts/:name', (req, res) => {
 app.put('/api/layouts/:name', (req, res) => {
   saveLayout(req.params.name, req.body);
   refreshCameraRegistry();
+  // Sync streams after config change — starts new cameras, stops removed ones
+  setTimeout(syncStreams, 500);
   io.emit('layouts:updated');
   res.json({ ok:true });
 });
 
 app.delete('/api/layouts/:name', (req, res) => {
   deleteLayout(req.params.name);
+  setTimeout(syncStreams, 500);
   io.emit('layouts:updated');
   res.json({ ok:true });
 });
 
-app.post('/api/streams/:cameraId/start', async (req, res) => {
-  const { url, transport, username, password,
-    resolution, bitrate, windowW, windowH, _pixelDims } = req.body;
-  if (!url) return res.status(400).json({ error:'url required' });
-  // Rate limit: max 20 start requests per camera per minute
-  const key = req.params.cameraId;
-  const count = (streamStartCounts.get(key) || 0) + 1;
-  streamStartCounts.set(key, count);
-  if (count > 20) {
-    console.warn(`[ratelimit] Too many start requests for ${key}`);
-    return res.status(429).json({ error:'Too many requests' });
+// Stream status — now includes ALL configured cameras, not just active ones
+app.get('/api/streams', (req, res) => {
+  const result = {};
+  // All configured cameras
+  for (const cam of getAllCameras()) {
+    const s = activeStreams.get(cam.id);
+    result[cam.id] = {
+      label:     cam.label || cam.id,
+      enabled:   cam.enabled !== false,
+      live:      !!s,
+      startedAt: s?.startedAt || null,
+      pid:       s?.pid || null,
+      hlsUrl:    `/hls/${cam.id}/stream.m3u8`,
+      crashes:   crashCounts.get(cam.id) || 0,
+    };
   }
-  await startStream({ id:req.params.cameraId, url, transport,
-    username, password, resolution, bitrate, windowW, windowH, _pixelDims });
-  res.json({ ok:true, hlsUrl:`/hls/${req.params.cameraId}/stream.m3u8` });
+  res.json(result);
 });
 
+// Browser requests HLS URL — server already has it running
+// Just return the HLS URL, no need to start anything
+app.post('/api/streams/:cameraId/start', (req, res) => {
+  const id = req.params.cameraId;
+  const s = activeStreams.get(id);
+  if (s) {
+    // Already running — just tell the browser where to find it
+    res.json({ ok:true, hlsUrl:`/hls/${id}/stream.m3u8`, alreadyRunning:true });
+  } else {
+    // Not running — maybe disabled or new camera, start it
+    const cam = cameraRegistry.get(id);
+    if (cam) {
+      startStream(cam).catch(console.error);
+      res.json({ ok:true, hlsUrl:`/hls/${id}/stream.m3u8`, starting:true });
+    } else {
+      res.status(404).json({ error:'Camera not found in registry' });
+    }
+  }
+});
+
+// Stop endpoint — disables a camera (sets enabled=false in its layout)
 app.post('/api/streams/:cameraId/stop', (req, res) => {
   stopStream(req.params.cameraId);
   res.json({ ok:true });
 });
 
-app.get('/api/streams', (req, res) => {
-  const result = {};
-  for (const [id, s] of activeStreams)
-    result[id] = { clients:s.clients, startedAt:s.startedAt, pid:s.pid,
-      hlsUrl:`/hls/${id}/stream.m3u8`, crashes: crashCounts.get(id)||0 };
-  res.json(result);
+// Toggle camera enabled/disabled
+app.post('/api/streams/:cameraId/toggle', async (req, res) => {
+  const id = req.params.cameraId;
+  const layouts = loadLayouts();
+  let found = false;
+  for (const [name, layout] of Object.entries(layouts)) {
+    const cam = (layout.cameras||[]).find(c => c.id === id);
+    if (cam) {
+      cam.enabled = cam.enabled === false ? true : false;
+      saveLayout(name, layout);
+      found = true;
+      if (cam.enabled) {
+        await startStream(cam);
+      } else {
+        stopStream(id);
+      }
+      break;
+    }
+  }
+  if (!found) return res.status(404).json({ error:'Camera not found' });
+  res.json({ ok:true, enabled: found });
 });
 
 app.post('/api/test-stream', (req, res) => {
-  const { transport = 'tcp' } = req.body;
+  const { transport='tcp' } = req.body;
   const url = buildAuthUrl(req.body.url, req.body.username, req.body.password);
   let done = false;
   const proc = spawn('ffprobe', [
@@ -557,12 +602,12 @@ app.post('/api/test-stream', (req, res) => {
     if (code === 0) {
       try { res.json({ ok:true, info:JSON.parse(out) }); }
       catch { res.json({ ok:true }); }
-    } else { res.json({ ok:false, error:'Could not connect to stream' }); }
+    } else { res.json({ ok:false, error:'Could not connect' }); }
   });
   setTimeout(() => {
     if (done) return; done = true;
     proc.kill();
-    res.json({ ok:false, error:'Connection timed out' });
+    res.json({ ok:false, error:'Timed out' });
   }, 8000);
 });
 
@@ -575,107 +620,102 @@ app.get('/api/version', async (req, res) => {
     if (match) {
       repo = match[1].replace(/\.git$/,'');
       const https = require('https');
-      const ghFetch = (host, p) => new Promise(resolve => {
+      const ghGet = (host, p) => new Promise(resolve => {
         const r = https.get({
-          hostname: host, path: p,
-          headers: { 'User-Agent':'webcameras' }, timeout: 5000
+          hostname:host, path:p,
+          headers:{'User-Agent':'webcameras'}, timeout:5000
         }, res2 => {
-          let d = ''; res2.on('data', x => d += x);
-          res2.on('end', () => {
-            try { resolve(JSON.parse(d)); } catch { resolve(null); }
-          });
+          let d=''; res2.on('data',x=>d+=x);
+          res2.on('end',()=>{ try{resolve(JSON.parse(d));}catch{resolve(null);}});
         });
-        r.on('error', () => resolve(null));
-        r.on('timeout', () => { r.destroy(); resolve(null); });
+        r.on('error',()=>resolve(null));
+        r.on('timeout',()=>{r.destroy();resolve(null);});
       });
-      const rel = await ghFetch('api.github.com',
-        `/repos/${repo}/releases/latest`);
+      const rel = await ghGet('api.github.com',`/repos/${repo}/releases/latest`);
       latest = rel?.tag_name?.replace(/^v/,'') || null;
       if (!latest) {
-        const p = await ghFetch('raw.githubusercontent.com',
-          `/${repo}/main/package.json`);
+        const p = await ghGet('raw.githubusercontent.com',`/${repo}/main/package.json`);
         latest = p?.version || null;
       }
     }
   } catch {}
-  res.json({ version:local, latest, repo,
-    upToDate: latest ? local === latest : null });
+  res.json({ version:local, latest, repo, upToDate:latest?local===latest:null });
 });
 
 app.get('/api/system', (req, res) => {
-  const info = { hlsDir:HLS_DIR, pidDir:PID_DIR, streams:activeStreams.size };
+  const info = { hlsDir:HLS_DIR, pidDir:PID_DIR,
+    streams:activeStreams.size, configured:getAllCameras().length };
   try {
-    const du = execSync(`df -h "${HLS_DIR}" | tail -1`, { timeout:2000 })
+    const du = execSync(`df -h "${HLS_DIR}" | tail -1`,{timeout:2000})
       .toString().trim().split(/\s+/);
     info.disk = { size:du[1], used:du[2], avail:du[3], pct:du[4] };
   } catch {}
   try {
-    const count = execSync(
-      `pgrep -c -f "${HLS_DIR}" 2>/dev/null || echo 0`, { timeout:2000 })
-      .toString().trim();
-    info.ffmpegCount = parseInt(count) || 0;
+    info.ffmpegCount = parseInt(
+      execSync(`pgrep -c -f "${HLS_DIR}" 2>/dev/null || echo 0`,{timeout:2000})
+      .toString().trim()) || 0;
   } catch {}
   res.json(info);
 });
 
 app.get('/health', (req, res) => {
-  // Quick health check — useful for Proxmox monitoring and load balancers
-  const healthy = activeStreams.size >= 0; // server is up
-  let ffmpegAvailable = false;
-  try { execSync('which ffmpeg', { timeout:1000 }); ffmpegAvailable = true; }
-  catch {}
-  res.status(healthy ? 200 : 503).json({
-    status:   healthy ? 'ok' : 'degraded',
-    version:  pkg.version,
-    streams:  activeStreams.size,
-    ffmpeg:   ffmpegAvailable,
-    uptime:   Math.floor(process.uptime()),
-    memory:   Math.round(process.memoryUsage().rss / 1024 / 1024) + 'MB'
+  let ffmpegOk = false;
+  try { execSync('which ffmpeg',{timeout:1000}); ffmpegOk=true; } catch {}
+  res.json({
+    status: 'ok', version: pkg.version,
+    streams: activeStreams.size,
+    configured: getAllCameras().length,
+    ffmpeg: ffmpegOk,
+    uptime: Math.floor(process.uptime()),
+    memory: Math.round(process.memoryUsage().rss/1024/1024)+'MB'
   });
 });
 
-// Rate limit stream start — max 20 starts per minute per camera
-const streamStartCounts = new Map();
-setInterval(() => streamStartCounts.clear(), 60000);
-
-app.get('/config', (req, res) =>
-  res.sendFile(path.join(__dirname, '../public/config.html')));
-app.get('*', (req, res) =>
-  res.sendFile(path.join(__dirname, '../public/index.html')));
+app.get('/config', (req,res) =>
+  res.sendFile(path.join(__dirname,'../public/config.html')));
+app.get('*', (req,res) =>
+  res.sendFile(path.join(__dirname,'../public/index.html')));
 
 // ── Socket.IO ─────────────────────────────────────────────────────────────────
 io.on('connection', socket => {
   console.log(`[ws] Client: ${socket.id}`);
-  socket.on('disconnect', () =>
-    console.log(`[ws] Disconnected: ${socket.id}`));
+  // Send current stream status on connect so browser knows what's live
+  const status = {};
+  for (const [id, s] of activeStreams)
+    status[id] = { live:true, hlsUrl:`/hls/${id}/stream.m3u8` };
+  socket.emit('streams:status', status);
+  socket.on('disconnect', () => console.log(`[ws] Disconnected: ${socket.id}`));
 });
 
+// ── Config file watcher ───────────────────────────────────────────────────────
 let chokidarDebounce = null;
 chokidar.watch(CONFIG_PATH, { ignoreInitial:true }).on('all', (_, p) => {
   console.log(`[config] Changed: ${path.basename(p)}`);
-  invalidateCache(); refreshCameraRegistry();
-  // Debounce 300ms — a single save triggers multiple fs events
+  invalidateCache();
+  refreshCameraRegistry();
   if (chokidarDebounce) clearTimeout(chokidarDebounce);
   chokidarDebounce = setTimeout(() => {
-    io.emit('layouts:updated');
     chokidarDebounce = null;
-  }, 300);
+    io.emit('layouts:updated');
+    syncStreams(); // start new cameras, stop removed ones
+  }, 500);
 });
 
 // ── Startup ───────────────────────────────────────────────────────────────────
 refreshCameraRegistry();
-
-// Kill any leftover ffmpeg from a previous run before starting fresh
 killAllLegacyProcesses();
 
-// Staggered prewarm after 3s
-setTimeout(prewarmDefaultPage, 3000);
+// Start ALL configured cameras after 3s
+setTimeout(() => {
+  console.log('[startup] Starting all configured cameras...');
+  syncStreams().catch(console.error);
+}, 3000);
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`\n+==========================================+`);
-  console.log(`|  WebCameras ${pkg.version} -- port ${PORT}      |`);
-  console.log(`|  HLS: ${HLS_DIR}  |`);
-  console.log(`|  PIDs: ${PID_DIR}             |`);
+  console.log(`|  WebCameras ${pkg.version} -- port ${PORT}     |`);
+  console.log(`|  HLS:  ${HLS_DIR}  |`);
+  console.log(`|  PIDs: ${PID_DIR}  |`);
   console.log(`+==========================================+\n`);
 });
 

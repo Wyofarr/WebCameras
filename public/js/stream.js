@@ -1,112 +1,82 @@
 /**
- * StreamManager — HLS.js playback + RTSP→HLS lifecycle
+ * StreamManager — HLS.js playback only.
+ *
+ * In the always-on model the server keeps every configured camera
+ * streaming continuously. The browser never starts or stops ffmpeg —
+ * it just points HLS.js at /hls/<id>/stream.m3u8 which is always
+ * being written. No /api/streams/start or /stop calls.
  */
 
 import { LayoutManager } from './layout.js';
 
-const hlsInstances  = new Map();  // id → Hls instance
-const retryTimers   = new Map();  // id → timer
-const cameraStore   = new Map();  // id → camera object (so we can restart cleanly)
-const videoStore    = new Map();  // id → videoEl
-const overlayStore  = new Map();  // id → overlayEl
-const MAX_RETRIES   = 5;
+const hlsInstances = new Map();  // id → Hls instance
+const retryTimers  = new Map();  // id → timer
 
 export const StreamManager = {
 
-  async attach(camera, videoEl, overlayEl) {
+  // ── Attach HLS.js to a camera cell ────────────────────────────────────────
+  attach(camera, videoEl, overlayEl) {
     const { id, url, type } = camera;
 
-    // Store refs for restart
-    cameraStore.set(id, camera);
-    videoStore.set(id, videoEl);
-    overlayStore.set(id, overlayEl);
-
-    this.detach(id);
+    this.detachHls(id); // clean up any existing HLS instance
 
     if (!url) {
       LayoutManager.onStreamError(id, 'No URL configured');
       return;
     }
 
-    // MJPEG
-    if (type === 'mjpeg' || (url.startsWith('http') &&
-        (url.includes('mjpeg') || url.includes('/video')))) {
-      this._attachMjpeg(camera, videoEl, overlayEl);
+    // MJPEG — direct image stream, no HLS needed
+    if (type === 'mjpeg' ||
+        (url.startsWith('http') &&
+         (url.includes('mjpeg') || url.includes('/video')))) {
+      this._attachMjpeg(camera, videoEl);
       return;
     }
 
-    // Direct HLS
+    // Direct HLS .m3u8 URL from camera (not our server)
     if (url.endsWith('.m3u8')) {
       this._attachHls(id, url, videoEl, overlayEl);
       return;
     }
 
-    // RTSP → server transcode
-    if (url.startsWith('rtsp://') || url.startsWith('rtsps://')) {
-      try {
-        const resp = await fetch(`/api/streams/${encodeURIComponent(id)}/start`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            url,
-            transport:  camera.transport  || 'tcp',
-            username:   camera.username   || '',
-            password:   camera.password   || '',
-            resolution: camera.resolution || '1080',
-            bitrate:    camera.bitrate    || '2500',
-            windowW:    camera.windowW    || null,
-            windowH:    camera.windowH    || null,
-            _pixelDims: camera._pixelDims || false,
-          })
-        });
-        const data = await resp.json();
-        if (data.hlsUrl) {
-          this._waitForHls(id, data.hlsUrl, videoEl, overlayEl);
-        }
-      } catch (e) {
-        LayoutManager.onStreamError(id, 'Server error: ' + e.message);
-      }
-      return;
-    }
-
-    // HTTP stream — try HLS.js
-    if (url.startsWith('http')) {
-      this._attachHls(id, url, videoEl, overlayEl);
-      return;
-    }
-
-    LayoutManager.onStreamError(id, 'Unsupported URL scheme');
+    // RTSP or HTTP — server is always transcoding to HLS
+    // Just point HLS.js at the segment playlist, no API call needed
+    const hlsUrl = `/hls/${encodeURIComponent(id)}/stream.m3u8`;
+    this._waitAndAttach(id, hlsUrl, videoEl, overlayEl);
   },
 
-  // Poll until m3u8 exists (server signals via socket too, but this is a fallback)
-  _waitForHls(id, hlsUrl, videoEl, overlayEl, attempts = 0) {
-    if (attempts > 30) {
-      LayoutManager.onStreamError(id, 'Stream startup timed out');
+  // Poll until the m3u8 exists (server may still be starting up)
+  _waitAndAttach(id, hlsUrl, videoEl, overlayEl, attempts = 0) {
+    if (attempts > 40) {
+      LayoutManager.onStreamError(id, 'Stream not available');
       return;
     }
+
     const t = setTimeout(async () => {
       try {
-        const r = await fetch(hlsUrl, { method: 'HEAD', cache: 'no-store' });
+        const r = await fetch(hlsUrl, { method:'HEAD', cache:'no-store' });
         if (r.ok) {
           this._attachHls(id, hlsUrl, videoEl, overlayEl);
         } else {
-          this._waitForHls(id, hlsUrl, videoEl, overlayEl, attempts + 1);
+          this._waitAndAttach(id, hlsUrl, videoEl, overlayEl, attempts + 1);
         }
       } catch {
-        this._waitForHls(id, hlsUrl, videoEl, overlayEl, attempts + 1);
+        this._waitAndAttach(id, hlsUrl, videoEl, overlayEl, attempts + 1);
       }
     }, 500);
     retryTimers.set(id + '_wait', t);
   },
 
   _attachHls(id, hlsUrl, videoEl, overlayEl, retryCount = 0) {
-    // Load HLS.js on demand — deferred from page load for faster initial render
+    // Load HLS.js on demand if not yet available
     if (typeof Hls === 'undefined' && window.loadHlsJs) {
-      window.loadHlsJs(() => this._attachHls(id, hlsUrl, videoEl, overlayEl, retryCount));
+      window.loadHlsJs(() =>
+        this._attachHls(id, hlsUrl, videoEl, overlayEl, retryCount));
       return;
     }
+
+    // Safari — native HLS support
     if (!Hls.isSupported()) {
-      // Safari native HLS
       if (videoEl.canPlayType('application/vnd.apple.mpegurl')) {
         videoEl.src = hlsUrl;
         videoEl.addEventListener('loadedmetadata', () => {
@@ -114,59 +84,54 @@ export const StreamManager = {
           LayoutManager.onStreamReady(id);
         }, { once: true });
       } else {
-        LayoutManager.onStreamError(id, 'HLS not supported');
+        LayoutManager.onStreamError(id, 'HLS not supported in this browser');
       }
       return;
     }
 
     const hls = new Hls({
-      lowLatencyMode:             true,
-      liveSyncDuration:           1,
-      liveMaxLatencyDuration:     4,
-      maxBufferLength:            6,
-      maxMaxBufferLength:         12,
-      startLevel:                 -1,
-      manifestLoadingTimeOut:     8000,
-      manifestLoadingMaxRetry:    8,
-      manifestLoadingRetryDelay:  500,
-      levelLoadingTimeOut:        8000,
-      fragLoadingTimeOut:         12000,
-      fragLoadingMaxRetry:        6,
+      lowLatencyMode:            true,
+      liveSyncDuration:          2,
+      liveMaxLatencyDuration:    6,
+      maxBufferLength:           8,
+      maxMaxBufferLength:        16,
+      startLevel:                -1,
+      manifestLoadingTimeOut:    10000,
+      manifestLoadingMaxRetry:   10,
+      manifestLoadingRetryDelay: 1000,
+      levelLoadingTimeOut:       10000,
+      fragLoadingTimeOut:        15000,
+      fragLoadingMaxRetry:       8,
     });
 
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
       videoEl.play().catch(() => {});
       LayoutManager.onStreamReady(id);
-      retryTimers.delete(id);
+      // Clear any wait timer
+      const wt = retryTimers.get(id + '_wait');
+      if (wt) { clearTimeout(wt); retryTimers.delete(id + '_wait'); }
     });
 
     hls.on(Hls.Events.ERROR, (_, data) => {
       if (!data.fatal) return;
-      console.warn(`[stream] Fatal HLS error on ${id}: ${data.type} / ${data.details}`);
+      console.warn(`[stream] HLS error ${id}: ${data.type}/${data.details}`);
       hls.destroy();
       hlsInstances.delete(id);
 
-      if (retryCount < MAX_RETRIES) {
-        const delay = Math.min(1500 * (retryCount + 1), 8000);
-        console.log(`[stream] Retrying ${id} in ${delay}ms (${retryCount+1}/${MAX_RETRIES})`);
-        const t = setTimeout(() => {
-          // Re-fetch the hlsUrl in case segments rolled over
-          this._attachHls(id, hlsUrl, videoEl, overlayEl, retryCount + 1);
-        }, delay);
+      // Always retry — server keeps the stream alive
+      const MAX = 8;
+      if (retryCount < MAX) {
+        const delay = Math.min(1500 * (retryCount + 1), 10000);
+        const t = setTimeout(() =>
+          this._attachHls(id, hlsUrl, videoEl, overlayEl, retryCount + 1),
+          delay);
         retryTimers.set(id, t);
       } else {
-        // Max retries hit — show error and do a slow retry
-        LayoutManager.onStreamError(id, 'Feed lost — retrying…');
+        LayoutManager.onStreamError(id, 'Reconnecting...');
+        // Long pause then full retry from poll
         const t = setTimeout(() => {
-          // Full restart: tell server to restart ffmpeg, then reattach
-          const cam = cameraStore.get(id);
-          const vid = videoStore.get(id);
-          const ov  = overlayStore.get(id);
-          if (cam && vid) {
-            console.log(`[stream] Full restart: ${id}`);
-            this.attach(cam, vid, ov);
-          }
-        }, 10000);
+          this._waitAndAttach(id, hlsUrl, videoEl, overlayEl);
+        }, 15000);
         retryTimers.set(id, t);
       }
     });
@@ -176,53 +141,50 @@ export const StreamManager = {
     hlsInstances.set(id, hls);
   },
 
-  _attachMjpeg(camera, videoEl, overlayEl) {
+  _attachMjpeg(camera, videoEl) {
     const { id, url } = camera;
     const img = document.createElement('img');
     img.src = url;
     img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
     img.onload  = () => LayoutManager.onStreamReady(id);
-    img.onerror = () => LayoutManager.onStreamError(id, 'MJPEG connection failed');
+    img.onerror = () => LayoutManager.onStreamError(id, 'MJPEG unavailable');
     videoEl.parentNode.insertBefore(img, videoEl);
     videoEl.style.display = 'none';
   },
 
-  detach(id) {
-    // Clear all timers for this id
+  // Detach HLS.js only — does NOT stop the server stream
+  detachHls(id) {
     for (const key of [id, id + '_wait']) {
-      if (retryTimers.has(key)) {
-        clearTimeout(retryTimers.get(key));
-        retryTimers.delete(key);
-      }
+      const t = retryTimers.get(key);
+      if (t) { clearTimeout(t); retryTimers.delete(key); }
     }
-    if (hlsInstances.has(id)) {
-      try { hlsInstances.get(id).destroy(); } catch {}
-      hlsInstances.delete(id);
-    }
-    fetch(`/api/streams/${encodeURIComponent(id)}/stop`, { method:'POST' }).catch(() => {});
-  },
-
-  // Called by socket event when server signals stream is ready
-  onReady(id) {
-    LayoutManager.onStreamReady(id);
-    // If HLS.js is waiting, prod it to retry immediately
     const hls = hlsInstances.get(id);
     if (hls) {
-      try { hls.startLoad(); } catch {}
+      try { hls.destroy(); } catch {}
+      hlsInstances.delete(id);
     }
+    // No /api/streams/stop call — server keeps running
   },
 
+  // Called by socket stream:ready — server just produced first segment
+  onReady(id) {
+    LayoutManager.onStreamReady(id);
+    const hls = hlsInstances.get(id);
+    if (hls) { try { hls.startLoad(); } catch {} }
+  },
+
+  // Called by socket stream:stopped — server crashed, will auto-restart
+  // Keep HLS.js alive — it will reconnect when segments reappear
   onStopped(id) {
-    // Server stopped the stream — it will auto-restart
-    // Just update the UI, don't destroy HLS.js — it will reconnect
-    LayoutManager.onStreamError(id, 'Reconnecting…');
+    LayoutManager.onStreamError(id, 'Reconnecting...');
+    // Don't destroy HLS.js — just let manifest retries handle reconnect
   },
 
-  // ─── Fullscreen ─────────────────────────────────────────────────────────────
+  // ── Fullscreen ─────────────────────────────────────────────────────────────
   _fsHls: null,
 
-  openFullscreen(camera, sourceVideo) {
-    const { id, url } = camera;
+  openFullscreen(camera) {
+    const { id, url, type } = camera;
     const fsEl  = document.getElementById('cam-fullscreen');
     const fsVid = document.getElementById('cam-fs-video');
     const fsLbl = document.getElementById('cam-fs-label');
@@ -230,13 +192,14 @@ export const StreamManager = {
     fsEl.classList.remove('hidden');
     fsLbl.textContent = camera.label || id;
 
-    const hlsUrl = url.endsWith('.m3u8') || url.startsWith('http')
+    // Use the server HLS stream — always running
+    const hlsUrl = (url.endsWith('.m3u8') || url.startsWith('http'))
       ? url
       : `/hls/${encodeURIComponent(id)}/stream.m3u8`;
 
-    if (Hls.isSupported()) {
+    if (typeof Hls !== 'undefined' && Hls.isSupported()) {
       if (this._fsHls) { try { this._fsHls.destroy(); } catch {} }
-      const hls = new Hls({ lowLatencyMode:true, liveSyncDuration:1 });
+      const hls = new Hls({ lowLatencyMode:true, liveSyncDuration:2 });
       hls.loadSource(hlsUrl);
       hls.attachMedia(fsVid);
       hls.on(Hls.Events.MANIFEST_PARSED, () => fsVid.play().catch(()=>{}));
@@ -253,6 +216,9 @@ export const StreamManager = {
     fsEl.classList.add('hidden');
     fsVid.pause();
     fsVid.src = '';
-    if (this._fsHls) { try { this._fsHls.destroy(); } catch {} this._fsHls = null; }
+    if (this._fsHls) {
+      try { this._fsHls.destroy(); } catch {}
+      this._fsHls = null;
+    }
   },
 };

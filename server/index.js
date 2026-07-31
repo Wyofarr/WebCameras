@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * webcameras - Web-based IP camera display system
- * Version: 2026.07.10
+ * Version: 2026.07.11
  *
  * Always-on stream model:
  *  - ALL configured cameras stream continuously from server start
@@ -206,24 +206,28 @@ function buildFfmpegArgs(camera, url, dir) {
           camera._pixelDims),
         '-b:v', `${bitrate}k`, '-maxrate', `${bitrate}k`,
         '-bufsize', `${bitrate}k`,
-        '-g', '60', '-sc_threshold', '0',
+        '-g', '60',             // keyframe every 60 frames
+        '-keyint_min', '60',    // force minimum keyframe interval
+        '-sc_threshold', '0',   // no scene-change keyframes (keeps GOP predictable)
+        '-forced_idr', '1',     // force IDR frames (guaranteed clean entry points)
         '-pix_fmt', 'yuv420p',
         '-threads', '1',
       ];
 
   return [
     '-hide_banner', '-loglevel', 'warning',
-    '-fflags', 'nobuffer', '-flags', 'low_delay',
+    '-fflags', 'nobuffer+genpts', '-flags', 'low_delay',
+    '-avoid_negative_ts', 'make_zero',
     '-rtsp_transport', transport,
     '-rtbufsize', '256k',
     '-i', url,
     ...videoArgs,
+    '-fps_mode', 'cfr',          // constant frame rate output — stops frame duplication
     '-c:a', 'aac', '-b:a', '64k', '-ac', '1',
     '-f', 'hls',
     '-hls_time', '2',
     '-hls_list_size', '4',
-    '-hls_flags',
-      'delete_segments+append_list+omit_endlist+split_by_time+independent_segments',
+    '-hls_flags', 'delete_segments+append_list+omit_endlist+split_by_time',
     '-hls_segment_type', 'mpegts',
     '-hls_allow_cache', '0',
     '-hls_segment_filename', path.join(dir, 'seg%05d.ts'),

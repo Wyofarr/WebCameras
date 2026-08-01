@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * webcameras - Web-based IP camera display system
- * Version: 2026.07.13
+ * Version: 2026.07.14
  *
  * Always-on stream model:
  *  - ALL configured cameras stream continuously from server start
@@ -10,7 +10,7 @@
  *  - Per-camera 'enabled' flag to disable without deleting
  *  - Config changes trigger a sync: new cameras start, removed cameras stop
  *
- * Process management (2026.07.13):
+ * Process management (2026.07.14):
  *  - Reads /proc directly to find ffmpeg processes -- no more pgrep/pkill
  *    shell string matching, which had a self-match bug (the wrapper shell's
  *    own command line contained the search pattern and got counted).
@@ -247,9 +247,15 @@ function buildFfmpegArgs(camera, url, dir) {
           camera._pixelDims),
         '-b:v', `${bitrate}k`, '-maxrate', `${bitrate}k`,
         '-bufsize', `${bitrate}k`,
-        '-g', '60',             // keyframe every 60 frames
-        '-keyint_min', '60',    // force minimum keyframe interval
-        '-sc_threshold', '0',   // no scene-change keyframes (keeps GOP predictable)
+        // Force a real keyframe every 2 seconds of WALL-CLOCK time, matching
+        // -hls_time 2 exactly. This is independent of the source's reported
+        // frame rate -- cameras with unreliable/unusual fps metadata (seen:
+        // 100/1, 205/12, 20/1) caused frame-count-based GOP (-g 60) to drift
+        // out of sync with segment boundaries, so many segments started
+        // mid-GOP with no keyframe -- black frame until the next one arrived.
+        '-force_key_frames', 'expr:gte(t,n_forced*2)',
+        '-g', '9999',            // upper bound only -- force_key_frames does the real work
+        '-sc_threshold', '0',    // no extra scene-change keyframes (keeps GOP predictable)
         '-pix_fmt', 'yuv420p',
         '-threads', '1',
       ];

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * webcameras - Web-based IP camera display system
- * Version: 2026.07.12
+ * Version: 2026.07.13
  *
  * Always-on stream model:
  *  - ALL configured cameras stream continuously from server start
@@ -9,6 +9,13 @@
  *  - Browser just attaches HLS.js to already-running segments
  *  - Per-camera 'enabled' flag to disable without deleting
  *  - Config changes trigger a sync: new cameras start, removed cameras stop
+ *
+ * Process management (2026.07.13):
+ *  - Reads /proc directly to find ffmpeg processes -- no more pgrep/pkill
+ *    shell string matching, which had a self-match bug (the wrapper shell's
+ *    own command line contained the search pattern and got counted).
+ *  - Watchdog kills only specific orphan PIDs, never a blanket kill-all.
+ *  - -use_wallclock_as_timestamps fixes non-monotonous DTS from RTSP jitter.
  */
 
 const express     = require('express');
@@ -130,19 +137,53 @@ function deletePidFile(id) {
 }
 
 // ── Kill all ffmpeg processes for a camera ────────────────────────────────────
+// Read /proc directly to find ffmpeg processes -- avoids the classic
+// pgrep/pkill self-match bug where the wrapper shell's own command line
+// contains the search pattern and gets counted as a match.
+function getRunningFfmpegPids(matchStr) {
+  const pids = [];
+  let entries;
+  try { entries = fs.readdirSync('/proc'); } catch { return pids; }
+  for (const entry of entries) {
+    if (!/^\d+$/.test(entry)) continue;
+    try {
+      const comm = fs.readFileSync(`/proc/${entry}/comm`, 'utf8').trim();
+      if (comm !== 'ffmpeg') continue;
+      if (matchStr) {
+        const cmdline = fs.readFileSync(`/proc/${entry}/cmdline`, 'utf8');
+        if (!cmdline.includes(matchStr)) continue;
+      }
+      pids.push(parseInt(entry));
+    } catch {} // process exited between readdir and read -- ignore
+  }
+  return pids;
+}
+
 function killStreamProcesses(id) {
   const segPath = path.join(HLS_DIR, id, 'seg');
+
+  // Kill via lockfile PID
   const lockedPid = readPidFile(id);
   if (lockedPid) {
     try { process.kill(lockedPid, 'SIGKILL'); } catch {}
   }
-  try {
-    execSync(`pkill -9 -f "${segPath}" 2>/dev/null || true`, { timeout: 2000 });
-  } catch {}
+
+  // Kill via our tracked process handle
   const s = activeStreams.get(id);
   if (s && s.process && !s.process.killed) {
     try { s.process.kill('SIGKILL'); } catch {}
   }
+
+  // Kill any remaining ffmpeg processes writing to this camera's segment path.
+  // Reads /proc directly -- no shell string matching, so no self-match risk.
+  const pids = getRunningFfmpegPids(segPath);
+  for (const pid of pids) {
+    try {
+      console.log(`[stream] Killing ffmpeg pid ${pid} for ${id}`);
+      process.kill(pid, 'SIGKILL');
+    } catch {}
+  }
+
   deletePidFile(id);
 }
 
@@ -217,6 +258,7 @@ function buildFfmpegArgs(camera, url, dir) {
     '-hide_banner', '-loglevel', 'warning',
     '-fflags', 'nobuffer', '-flags', 'low_delay',
     '-avoid_negative_ts', 'make_zero',
+    '-use_wallclock_as_timestamps', '1', // fixes non-monotonous DTS from RTSP jitter
     '-rtsp_transport', transport,
     '-rtbufsize', '256k',
     '-i', url,
@@ -435,9 +477,17 @@ function getCameraWindowDims(cameraId) {
 // ── Startup cleanup ───────────────────────────────────────────────────────────
 function killAllLegacyProcesses() {
   console.log('[startup] Killing legacy ffmpeg processes...');
-  try {
-    execSync(`pkill -9 -f "${HLS_DIR}" 2>/dev/null || true`, { timeout: 3000 });
-  } catch {}
+
+  // Kill via /proc scan -- catches anything writing to our HLS dir
+  const pids = getRunningFfmpegPids(HLS_DIR);
+  for (const pid of pids) {
+    try {
+      console.log(`[startup] Killing legacy ffmpeg pid ${pid}`);
+      process.kill(pid, 'SIGKILL');
+    } catch {}
+  }
+
+  // Also clean up PID lockfiles
   try {
     fs.readdirSync(PID_DIR).filter(f => f.endsWith('.pid')).forEach(f => {
       try {
@@ -450,26 +500,31 @@ function killAllLegacyProcesses() {
   console.log('[startup] Done');
 }
 
-// ── CPU watchdog ──────────────────────────────────────────────────────────────
+// ── Orphan process watchdog ───────────────────────────────────────────────────
+// Finds ffmpeg processes writing to our HLS dir that we are NOT tracking in
+// activeStreams, and kills only those specific orphans -- never a blanket
+// kill-everything response. Uses /proc scanning, not pgrep string matching,
+// so it can never match its own invocation or other unrelated processes.
 setInterval(() => {
   try {
-    const count = parseInt(
-      execSync(`pgrep -c -f "${HLS_DIR}" 2>/dev/null || echo 0`,
-        { timeout:2000 }).toString().trim()) || 0;
-    const expected = activeStreams.size;
-    if (count > expected + 2) {
-      console.warn(`[watchdog] ${count} ffmpeg but ${expected} tracked — resetting`);
-      try {
-        execSync(`pkill -9 -f "${HLS_DIR}" 2>/dev/null || true`, { timeout:2000 });
-      } catch {}
-      for (const [id] of activeStreams) {
-        deletePidFile(id);
-        activeStreams.delete(id);
+    const running  = getRunningFfmpegPids(HLS_DIR);
+    const trackedPids = new Set(
+      [...activeStreams.values()].map(s => s.pid)
+    );
+    const orphans = running.filter(pid => !trackedPids.has(pid));
+
+    if (orphans.length > 0) {
+      console.warn(`[watchdog] Found ${orphans.length} orphan ffmpeg process(es): ${orphans.join(',')}`);
+      for (const pid of orphans) {
+        try {
+          console.warn(`[watchdog] Killing orphan pid ${pid}`);
+          process.kill(pid, 'SIGKILL');
+        } catch {}
       }
-      // Re-sync after a brief pause
-      setTimeout(syncStreams, 3000);
     }
-  } catch {}
+  } catch (e) {
+    console.error('[watchdog] Error scanning processes:', e.message);
+  }
 }, 15000);
 
 // ── Disk guard ────────────────────────────────────────────────────────────────
@@ -654,9 +709,7 @@ app.get('/api/system', (req, res) => {
     info.disk = { size:du[1], used:du[2], avail:du[3], pct:du[4] };
   } catch {}
   try {
-    info.ffmpegCount = parseInt(
-      execSync(`pgrep -c -f "${HLS_DIR}" 2>/dev/null || echo 0`,{timeout:2000})
-      .toString().trim()) || 0;
+    info.ffmpegCount = getRunningFfmpegPids(HLS_DIR).length;
   } catch {}
   res.json(info);
 });
